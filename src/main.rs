@@ -2,8 +2,10 @@
 use std::fs;
 use std::io;
 
+mod files;
+
 fn main() -> io::Result<()> {
-    let path = "/home/alex/Projects/sql_docs/sql_files/";
+    let path = "/home/alex/Projects/sql-docs/sql_files/";
 
     println!("Contents of directory '{}':", path);
     for entry in fs::read_dir(path)? {
