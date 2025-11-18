@@ -3,19 +3,20 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-pub struct SqlFiles {
+pub struct SqlFilesList {
     sql_files: Vec<PathBuf>,
 }
 
-impl SqlFiles {
-    pub fn new<P: AsRef<Path>>(path: P) -> io::Result<SqlFiles> {
+impl SqlFilesList {
+    pub fn new<P: AsRef<Path>>(path: P) -> io::Result<SqlFilesList> {
         let recursive_scan = recursive_dir_scan(path.as_ref())?;
-        Ok(SqlFiles {
+        Ok(SqlFilesList {
             sql_files: recursive_scan,
         })
     }
 }
 
+/// Helper function to recursively scan the specified directory and collect all sql files found
 fn recursive_dir_scan(path: &Path) -> io::Result<Vec<PathBuf>> {
     let mut sql_files = Vec::new();
     for entry in fs::read_dir(path)? {
@@ -31,15 +32,15 @@ fn recursive_dir_scan(path: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(sql_files)
 }
 
-pub struct Content {
-    raw_sql: String,
+pub struct SqlFile {
+    path: PathBuf,
+    content: String,
 }
 
-// impl Content {
-//     pub fn new(files: SqlFiles) -> Content {
+pub struct SqlFileSet {
+    files_contents: Vec<SqlFile>
+}
 
-//     }
-// }
 
 #[cfg(test)]
 mod tests {

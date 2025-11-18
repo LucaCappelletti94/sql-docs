@@ -2,7 +2,7 @@
 use std::fs;
 use std::io;
 
-mod files;
+pub mod files;
 
 fn main() -> io::Result<()> {
     let path = "/home/alex/Projects/sql-docs/sql_files/";
