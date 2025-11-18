@@ -1,7 +1,6 @@
 //! The module for working with and loading the content from `sql` files
 use std::fs;
 use std::io;
-use std::io::Error;
 use std::path::{Path, PathBuf};
 
 pub struct SqlFilesList {
@@ -15,8 +14,13 @@ impl SqlFilesList {
             sql_files: recursive_scan,
         })
     }
-    pub fn sql_files(&self) -> &Vec<PathBuf> {
-        return &self.sql_files;
+    pub fn sql_files(&self) -> &[PathBuf] {
+        &self.sql_files
+    }
+    pub fn sql_files_sorted(&self) -> Vec<&PathBuf> {
+        let mut files: Vec<&PathBuf> = self.sql_files.iter().collect();
+        files.sort();
+        files
     }
 }
 
@@ -119,4 +123,56 @@ mod tests {
         // Optional cleanup
         let _ = fs::remove_dir_all(&base);
     }
+
+    #[test]
+    fn test_sql_file_list() {
+        let base = env::temp_dir().join("recursive_scan_test2");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let sub = base.join("subdir");
+        fs::create_dir_all(&sub).unwrap();
+        let file1 = base.join("one.sql");
+        let file2 = sub.join("two.sql");
+        let non_sql1 = base.join("ignore.txt");
+        let non_sql2 = sub.join("README.md");
+        fs::File::create(&file1).unwrap();
+        fs::File::create(&file2).unwrap();
+        fs::File::create(&non_sql1).unwrap();
+        fs::File::create(&non_sql2).unwrap();
+        let sql_file_list = SqlFilesList::new(&base).unwrap();
+        let mut expected = vec![&file1, &file2];
+        expected.sort();
+        assert_eq!(sql_file_list.sql_files_sorted(), expected);
+        let _ = fs::remove_dir_all(&base);
+    }
+    #[test]
+    fn test_sql_file_read() {
+        let base = env::temp_dir().join("recursive_scan_test3");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let sub = base.join("subdir");
+        fs::create_dir_all(&sub).unwrap();
+        let file1 = base.join("one.sql");
+        let file2 = sub.join("two.sql");
+        let non_sql1 = base.join("ignore.txt");
+        let non_sql2 = sub.join("README.md");
+        fs::File::create(&file1).unwrap();
+        fs::File::create(&file2).unwrap();
+        fs::File::create(&non_sql1).unwrap();
+        fs::File::create(&non_sql2).unwrap();
+        let sql_statement = "CREATE TABLE users( id INTEGER PRIMARY KEY);";
+        fs::write(&file1, sql_statement).unwrap();
+        fs::write(&file2, sql_statement).unwrap();
+        let mut expected = vec![&file1, &file2];
+        expected.sort();
+        let mut found: Vec<&PathBuf> = Vec::new();
+        let sql_file_set = SqlFileSet::new(&base).unwrap();
+        for file in sql_file_set.iter() {
+            assert_eq!(file.content, sql_statement);
+            found.push(&file.path);
+        }
+        assert_eq!(found, expected);
+        let _ = fs::remove_dir_all(&base);
+    }
+
 }
