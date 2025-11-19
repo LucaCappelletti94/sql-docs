@@ -37,7 +37,8 @@ impl SqlFilesList {
     /// # Parameters
     ///
     /// - `path`: any type that implements [`AsRef<Path>`].
-    /// - `deny_list`: optional list of path-like strings representing files to exclude.
+    /// - `deny_list`: optional list of path-like strings representing files to
+    ///   exclude.
     ///
     /// # Errors
     ///

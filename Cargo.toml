@@ -28,6 +28,7 @@ categories = [
 
 
 [dependencies]
+sqlparser = "0.59.0"
 
 
 [lints.rust]
