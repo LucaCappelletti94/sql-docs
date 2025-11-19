@@ -1,45 +1,67 @@
-//! The module for working with and loading the content from `sql` files
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
+//! Module that offers utilities for discovering, filtering, and loading `.sql`
+//! files from the filesystem.
 
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
+
+/// A list of SQL files that should be excluded from processing.
+///
+/// Entries in the deny list are treated as full paths [`PathBuf`]s).
 pub struct DenyList {
     deny_files: Vec<PathBuf>,
 }
 
 impl DenyList {
-    pub fn new(files: Vec<String>) -> DenyList {
-        let buf_files= files.iter().map(|f| PathBuf::from(f)).collect();
-        DenyList { deny_files: buf_files }
+    /// Creates a new [`DenyList`] from a list of path-like strings.
+    pub fn new(files: &[String]) -> Self {
+        let buf_files = files.iter().map(PathBuf::from).collect();
+        Self { deny_files: buf_files }
     }
-    pub fn deny_files(&self) -> &Vec<PathBuf> {
+
+    /// Returns the underlying collection of denied file paths.
+    #[must_use]
+    pub fn deny_files(&self) -> &[PathBuf] {
         &self.deny_files
     }
 }
 
+/// A collection of discovered `.sql` files under a given directory.
 pub struct SqlFilesList {
     sql_files: Vec<PathBuf>,
 }
 
 impl SqlFilesList {
-    pub fn new<P: AsRef<Path>>(path: P, deny_list: Option<Vec<String>>) -> io::Result<SqlFilesList> {
+    /// Recursively scans `path` for `.sql` files and returns a filtered list.
+    /// # Parameters
+    ///
+    /// - `path`: any type that can implement the `AsRef<Path>` trait
+    /// - `deny_list`: An optional `Vec` of `String` types.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if the file cannot be read.
+    pub fn new<P: AsRef<Path>>(path: P, deny_list: Option<Vec<String>>) -> io::Result<Self> {
         let recursive_scan = recursive_dir_scan(path.as_ref())?;
         let allow_list = if let Some(list) = deny_list {
-            let deny = DenyList::new(list);
-            recursive_scan
-                .into_iter()
-                .filter(|p| !deny.deny_files().contains(p))
-                .collect()
+            let deny = DenyList::new(&list);
+            recursive_scan.into_iter().filter(|p| !deny.deny_files().contains(p)).collect()
         } else {
             recursive_scan
         };
 
-        Ok(SqlFilesList { sql_files: allow_list })
+        Ok(Self { sql_files: allow_list })
     }
 
+    /// Returns the discovered `.sql` files in their original order.
+    #[must_use]
     pub fn sql_files(&self) -> &[PathBuf] {
         &self.sql_files
     }
+
+    /// Returns a sorted view of the discovered `.sql` files.
+    #[must_use]
     pub fn sql_files_sorted(&self) -> Vec<&PathBuf> {
         let mut files: Vec<&PathBuf> = self.sql_files.iter().collect();
         files.sort();
@@ -47,16 +69,14 @@ impl SqlFilesList {
     }
 }
 
-/// Helper function to recursively scan the specified directory and collect all sql files found
+/// Helper function that recursively scans a directory for `.sql` files given a
+/// [`Path`] as parameter
 fn recursive_dir_scan(path: &Path) -> io::Result<Vec<PathBuf>> {
     let mut sql_files = Vec::new();
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_file() && path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        == Some("sql") {
+        if path.is_file() && path.extension().and_then(|ext| ext.to_str()) == Some("sql") {
             sql_files.push(path);
         } else if path.is_dir() {
             let nested = recursive_dir_scan(&path)?;
@@ -66,25 +86,59 @@ fn recursive_dir_scan(path: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(sql_files)
 }
 
+/// A single `.sql` file and its loaded contents.
 #[derive(Debug)]
 pub struct SqlFile {
     path: PathBuf,
     content: String,
 }
+
 impl SqlFile {
-     pub fn new(path: &Path) -> io::Result<SqlFile> {
+    /// Loads a [`SqlFile`] from the given path.
+    ///
+    /// This reads the entire file contents into memory as a [`String`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if the file cannot be read.
+    pub fn new(path: &Path) -> io::Result<Self> {
         let content = fs::read_to_string(path)?;
-        Ok(SqlFile { path: path.to_owned(), content })
-     }
+        Ok(Self { path: path.to_owned(), content })
+    }
+
+    /// Returns the filesystem path associated with this SQL file.
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Returns the raw SQL text contained in this file.
+    #[must_use]
+    pub fn content(&self) -> &str {
+        &self.content
+    }
 }
 
+/// A loaded set of `.sql` files, including their contents.
 #[derive(Debug)]
 pub struct SqlFileSet {
-    files_contents: Vec<SqlFile>
+    files_contents: Vec<SqlFile>,
 }
 
 impl SqlFileSet {
-    pub fn new(path: &Path, deny_list: Option<Vec<String>>) -> io::Result<SqlFileSet> {
+    /// Recursively discovers `.sql` files under `path`, applies the optional
+    /// deny list, and loads the contents of each file.
+    ///
+    /// # Parameters
+    ///
+    /// - `path`: Root directory to scan recursively for `.sql` files.
+    /// - `deny_list`: Optional list of path-like strings representing files
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if directory traversal fails or if any of the
+    /// discovered SQL files cannot be read.
+    pub fn new(path: &Path, deny_list: Option<Vec<String>>) -> io::Result<Self> {
         let sql_files_list = SqlFilesList::new(path, deny_list)?;
 
         let files_contents = sql_files_list
@@ -93,57 +147,41 @@ impl SqlFileSet {
             .map(|p| SqlFile::new(p))
             .collect::<io::Result<Vec<_>>>()?;
 
-        Ok(SqlFileSet { files_contents })
+        Ok(Self { files_contents })
     }
+
+    /// Returns an iterator over the loaded SQL files in this set.
     pub fn iter(&self) -> impl Iterator<Item = &SqlFile> {
         self.files_contents.iter()
-    } 
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::{env, fs};
+
     use super::*;
-    use std::env;
-    use std::fs;
 
     #[test]
     fn test_recursive_scan_finds_only_sql_files_recursively() {
-        // Create a unique temporary base directory
         let base = env::temp_dir().join("recursive_scan_test");
-        // Clean up any previous leftovers
         let _ = fs::remove_dir_all(&base);
         fs::create_dir_all(&base).unwrap();
-
-        // Create a nested subdirectory
         let sub = base.join("subdir");
         fs::create_dir_all(&sub).unwrap();
-
-        // Paths for SQL files
         let file1 = base.join("one.sql");
         let file2 = sub.join("two.sql");
-
-        // Non-SQL files (should be ignored)
         let non_sql1 = base.join("ignore.txt");
         let non_sql2 = sub.join("README.md");
-
-        // Create the files to be tested
         fs::File::create(&file1).unwrap();
         fs::File::create(&file2).unwrap();
         fs::File::create(&non_sql1).unwrap();
         fs::File::create(&non_sql2).unwrap();
-
-        // Call the function under test
         let mut found = recursive_dir_scan(base.as_path()).unwrap();
-
-        // Sort so order doesn't matter
         found.sort();
-
         let mut expected = vec![file1, file2];
         expected.sort();
-
         assert_eq!(found, expected);
-
-        // Optional cleanup
         let _ = fs::remove_dir_all(&base);
     }
 
@@ -162,7 +200,7 @@ mod tests {
         fs::File::create(&file2).unwrap();
         fs::File::create(&non_sql1).unwrap();
         fs::File::create(&non_sql2).unwrap();
-        let sql_file_list = SqlFilesList::new(&base).unwrap();
+        let sql_file_list = SqlFilesList::new(&base, None).unwrap();
         let mut expected = vec![&file1, &file2];
         expected.sort();
         assert_eq!(sql_file_list.sql_files_sorted(), expected);
@@ -189,7 +227,7 @@ mod tests {
         let mut expected = vec![&file1, &file2];
         expected.sort();
         let mut found: Vec<&PathBuf> = Vec::new();
-        let sql_file_set = SqlFileSet::new(&base).unwrap();
+        let sql_file_set = SqlFileSet::new(&base, None).unwrap();
         for file in sql_file_set.iter() {
             assert_eq!(file.content, sql_statement);
             found.push(&file.path);
@@ -198,4 +236,27 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
+    #[test]
+    fn test_deny_list_filters_full_paths() {
+        let base = env::temp_dir().join("deny_list_full_path_test");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let sub = base.join("subdir");
+        fs::create_dir_all(&sub).unwrap();
+        let file1 = base.join("one.sql");
+        let file2 = sub.join("two.sql");
+        let non_sql1 = base.join("ignore.txt");
+        let non_sql2 = sub.join("README.md");
+        fs::File::create(&file1).unwrap();
+        fs::File::create(&file2).unwrap();
+        fs::File::create(&non_sql1).unwrap();
+        fs::File::create(&non_sql2).unwrap();
+        let deny_list = Some(vec![file1.to_string_lossy().to_string()]);
+        let sql_file_list = SqlFilesList::new(&base, deny_list).unwrap();
+        let found = sql_file_list.sql_files_sorted();
+        let mut expected = vec![&file2];
+        expected.sort();
+        assert_eq!(found, expected);
+        let _ = fs::remove_dir_all(&base);
+    }
 }

@@ -2,5 +2,53 @@
 name = "sql_docs"
 version = "0.1.0"
 edition = "2024"
+description = "A crate for parsing comments from sql files and using them for documentation generation"
+license = "GNU General Public License v3.0"
+repository = "https://github.com/rpg-alex/sql-docs"
+keywords = [
+    "sql",
+    "documentation",
+    "parser",
+    "sqlparser",
+    "filesystem",
+    "cli",
+    "schema",
+    "introspection",
+    "codegen",
+    "migrations",
+]
+
+categories = [
+    "database",
+    "development-tools",
+    "parser-implementations",
+    "text-processing",
+    "filesystem",
+]
+
 
 [dependencies]
+
+
+[lints.rust]
+missing_docs = "forbid"
+unreachable_patterns = "forbid"
+unused_must_use = "forbid"
+unused_import_braces = "forbid"
+unconditional_recursion = "forbid"
+unused_macro_rules = "forbid"
+deprecated = "deny"
+unsafe_code = "forbid"
+
+[lints.clippy]
+unreadable_literal = "allow"
+missing_panics_doc = "allow"
+struct_excessive_bools = "allow"
+should_panic_without_expect = "allow"
+clone_on_copy = "forbid"
+unwrap_used = "deny"
+expect_used = "deny"
+pedantic = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+multiple_crate_versions = "allow"
