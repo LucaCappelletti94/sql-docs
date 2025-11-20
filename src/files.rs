@@ -157,6 +157,15 @@ impl SqlFileSet {
     }
 }
 
+impl IntoIterator for SqlFileSet {
+    type IntoIter = std::vec::IntoIter<SqlFile>;
+    type Item = SqlFile;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.files_contents.into_iter()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{env, fs};
