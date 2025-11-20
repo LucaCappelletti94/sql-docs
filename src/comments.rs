@@ -3,9 +3,13 @@
 //!
 //! *leading comment* a comment that
 //! precedes an SQL Statement.
+use std::fmt;
+
+use crate::ast::ParsedSqlFile;
 
 /// Structure for holding a location in the file. Assumes file is first split by
 /// lines and then split by characters (column)
+#[derive(Debug)]
 pub struct Location {
     line: u64,
     column: u64,
@@ -35,14 +39,20 @@ impl Location {
     }
 }
 
+impl Default for Location {
+    fn default() -> Self {
+        Self::new(0, 0)
+    }
+}
+
 /// A structure for holding the span of comments found
-pub struct CommentSpan {
+pub struct Span {
     start: Location,
     end: Location,
 }
 
-impl CommentSpan {
-    /// Method for creating a new instance of the [`CommentSpan`] for a
+impl Span {
+    /// Method for creating a new instance of the [`Span`] for a
     /// comment's span
     ///
     /// # Parameters
@@ -53,46 +63,119 @@ impl CommentSpan {
         Self { start, end }
     }
 
-    /// Getter for the start location of a [`CommentSpan`]
+    /// Getter for the start location of a [`Span`]
     #[must_use]
     pub const fn start(&self) -> &Location {
         &self.start
     }
 
-    /// Getter for the end location of a [`CommentSpan`]
+    /// Getter for the end location of a [`Span`]
     #[must_use]
     pub const fn end(&self) -> &Location {
         &self.end
     }
 }
 
-/// Structure that holds the comment along with its location in the file
+/// Enum for holding the comment content, differentiated by single line `--` and
+/// multiline `/* */`
+pub enum CommentKind {
+    /// Enum variant for Multiline Comments
+    MultiLine(String),
+    /// Enum variant for Single Line Comments
+    SingleLine(String),
+}
+
+/// Structure for containing the [`CommentKind`] and the [`Span`] for a comment
 pub struct Comment {
-    comment: String,
-    span: CommentSpan,
+    kind: CommentKind,
+    span: Span,
 }
 
 impl Comment {
-    /// Method for creating a new [`Comment`] from the comment [`String`] and
-    /// the [`CommentSpan`]
+    /// Method for making a new comment
+    ///
+    /// # Parameters
+    /// - `kind` where the type of comment is passed as a [`CommentKind`]
+    /// - `span` where the [`Span`] of the comment is passed
+    #[must_use]
+    pub const fn new(kind: CommentKind, span: Span) -> Self {
+        Self { kind, span }
+    }
+
+    /// Getter method to get the [`CommentKind`]
+    #[must_use]
+    pub const fn kind(&self) -> &CommentKind {
+        &self.kind
+    }
+
+    /// Getter method to get the [`Span`] of the comment
+    #[must_use]
+    pub const fn span(&self) -> &Span {
+        &self.span
+    }
+
+    /// Getter method that will return the comment content as a [`str`],
+    /// regardless of [`CommentKind`]
+    #[must_use]
+    pub const fn text(&self) -> &str {
+        match &self.kind {
+            CommentKind::SingleLine(s) | CommentKind::MultiLine(s) => s.as_str(),
+        }
+    }
+}
+
+/// Enum for returning errors withe Comment parsing
+#[derive(Debug)]
+pub enum CommentError {
+    /// Found a block terminator `*/` without a matching opener `/*`
+    UnmatchedBlockCommentStart {
+        /// Returns the location of the block terminator found
+        location: Location,
+    },
+}
+
+impl fmt::Display for CommentError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CommentError::UnmatchedBlockCommentStart { location } => {
+                write!(
+                    f,
+                    "unmatched block comment start at line {}, column {}",
+                    location.line(),
+                    location.column()
+                )
+            }
+        }
+    }
+}
+
+/// Structure that holds the comment along with its location in the file
+pub struct CommentWithSpan {
+    comment: Comment,
+    span: Span,
+}
+
+impl CommentWithSpan {
+    /// Method for creating a new [`CommentWithSpan`] from the comment
+    /// [`String`] and the [`Span`]
     ///
     /// # Parameters
     /// - the comment as a [`String`]
     /// - the span of the comment as a [`CommentSpan`]
     #[must_use]
-    pub const fn new(comment: String, span: CommentSpan) -> Self {
+    pub const fn new(comment: Comment, span: Span) -> Self {
         Self { comment, span }
     }
 
     /// Getter method for retrieving the comment content
     #[must_use]
-    pub fn comment(&self) -> &str {
+    pub const fn comment(&self) -> &Comment {
         &self.comment
     }
 
     /// Getter method for retrieving the [`CommentSpan`] of the comment
     #[must_use]
-    pub const fn span(&self) -> &CommentSpan {
+    pub const fn span(&self) -> &Span {
         &self.span
     }
 }
@@ -123,6 +206,30 @@ impl Comments {
 
         Self { comments }
     }
+
+    /// Build all leading comments from a parsed SQL file
+    #[must_use]
+    pub fn parse_all_comments_from_file(file: &ParsedSqlFile) -> Self {
+        let src = file.content();
+        let mut comments = Vec::new();
+        let mut current_location = Location::default();
+
+        Self { comments }
+    }
+
+    /// Scans the raw file and collects all comments
+    ///
+    /// # Parameters
+    /// - `src` which is the `SQL` file content as a [`str`]
+    fn scan_comments(src: &str) -> Self {
+        let mut comments = Vec::new();
+
+        Self { comments }
+    }
+
+    /// Parse single line comments
+
+    /// Parse multi line comments
 
     /// Getter method for retrieving the Vec of [`Comment`]
     #[must_use]

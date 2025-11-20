@@ -1,5 +1,5 @@
-//! Module for parsing the SQL and then using the resulting AST to walk back and
-//! check for comments
+//! Module for parsing the SQL and then using the resulting AST that will later
+//! be used in `comments` module
 use std::path::Path;
 
 use sqlparser::{
@@ -30,10 +30,22 @@ impl ParsedSqlFile {
         Ok(Self { file, statements })
     }
 
+    /// Getter method for returning the [`SqlFile`]
+    #[must_use]
+    pub const fn file(&self) -> &SqlFile {
+        &self.file
+    }
+
     /// Getter method for returning the current object's file's path
     #[must_use]
     pub fn path(&self) -> &Path {
         self.file.path()
+    }
+
+    /// Getter for the file's content
+    #[must_use]
+    pub fn content(&self) -> &str {
+        self.file.content()
     }
 
     /// Getter method for returning the vector of all statements [`Statement`]
