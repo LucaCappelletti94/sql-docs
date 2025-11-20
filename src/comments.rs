@@ -149,6 +149,8 @@ impl fmt::Display for CommentError {
     }
 }
 
+impl std::error::Error for CommentError {}
+
 /// Structure that holds the comment along with its location in the file
 pub struct CommentWithSpan {
     comment: Comment,
