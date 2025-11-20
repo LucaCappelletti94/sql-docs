@@ -226,10 +226,10 @@ impl Comments {
     ///
     /// # Parameters
     /// - `src` which is the `SQL` file content as a [`str`]
-    fn scan_comments(src: &str) -> Self {
+    fn scan_comments(src: &str) -> CommentResult<Self> {
         let mut comments = Vec::new();
 
-        Self { comments }
+        Ok(Self { comments })
     }
 
     /// Parse single line comments
