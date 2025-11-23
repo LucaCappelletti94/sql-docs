@@ -247,39 +247,44 @@ impl Comments {
         let mut start_line = 0u64;
         let mut start_column = 0u64;
 
+        let mut single_line = String::new();
+        let mut multi_line = String::new();
+
         let mut current_comment = String::new();
-        let mut src_state_machine = src.chars().peekable();
-        while let Some(c) = src_state_machine.next() {
-            match c {
-                '-' => {
-                    if current_column < 2 {
-                        current_comment.push(c);
-                    }
-                }
-                '/' => {
-                    if current_column == 0 || current_comment.contains("/*") {
-                        current_comment.push(c);
-                    }
-                }
-                '*' => {
-                    current_comment.push(c);
-                }
-                '\n' => {
-                    if !current_comment.is_empty() {
-                        current_comment.clear();
-                    }
-                    current_line += 1;
-                    current_column = 0;
-                }
-                _ => {
-                    if current_comment.contains("--") || current_comment.contains("/*") {
-                        current_comment.push(c);
+        //let mut src_state_machine = src.chars().peekable();
+        let mut lines = src.lines().into_iter();
+        for line in lines {
+            for (i, c) in line.chars().into_iter().enumerate() {
+                match c {
+                    '-' => {
+                        match i {
+                            0 => {
+                                single_line.push(c);
+                                start_column = i as u64;
+                            },
+                            1 => {
+                                match single_line.is_empty() {
+                                    false => {
+                                        if single_line.len() == 1  {
+                                            single_line.push(c);
+                                        }
+                                    },
+                                    _ => {}
+                                }
+                            }
+                        }
+                    },
+                    '/' => ,
+                    '*' => ,
+                    _ => {
+                        if !single_line.is_empty() {
+                            single_line.push(c);
+                        }
                     }
                 }
             }
-            if c != '\n' {
-                current_column += 1;
-            }
+            
+            start_line += 1;
         }
 
         Ok(Self { comments })
