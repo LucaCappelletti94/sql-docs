@@ -83,8 +83,9 @@ impl ParsedSqlFileSet {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::{env, fs};
+
+    use super::*;
     use crate::files::{SqlFile, SqlFileSet};
 
     #[test]
