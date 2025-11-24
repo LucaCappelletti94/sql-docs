@@ -96,14 +96,13 @@ pub enum CommentKind {
 impl CommentKind {
     fn comment(&self) -> &str {
         match self {
-            Self::MultiLine(comment) => comment,
-            Self::SingleLine(comment) => comment,
+            Self::MultiLine(comment) | Self::SingleLine(comment) => comment,
         }
     }
 }
 
 /// Structure for containing the [`CommentKind`] and the [`Span`] for a comment
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Comment {
     kind: CommentKind,
     span: Span,
@@ -215,7 +214,7 @@ impl CommentWithSpan {
 }
 
 /// Structure for holding all comments found in the document
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Comments {
     comments: Vec<Comment>,
 }
@@ -438,6 +437,7 @@ fn multiline_comment_span() {
 #[test]
 fn parse_comments() {
     use std::path::Path;
+
     use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
     let path = Path::new("sql_files");
     let set = SqlFileSet::new(path, None).unwrap();
@@ -459,16 +459,13 @@ fn parse_comments() {
                     "Main body text",
                     "When the post was created",
                 ];
-                assert_eq!(expected.len(),parsed_comments.comments().len());
+                assert_eq!(expected.len(), parsed_comments.comments().len());
                 parsed_comments
                     .comments()
                     .iter()
                     .enumerate()
-                    .for_each(|(i,c)| 
-                    assert_eq!(expected[i],c.kind().comment()));
-
-                
-            },
+                    .for_each(|(i, c)| assert_eq!(expected[i], c.kind().comment()));
+            }
             "sql_files/with_multiline_comments.sql" => {
                 let expected = [
                     "Users table stores user account information \nmultiline",
@@ -483,13 +480,13 @@ fn parse_comments() {
                     "Main body text \n    multiline",
                     "When the post was created \n    multiline",
                 ];
-                assert_eq!(expected.len(),parsed_comments.comments().len());
+                assert_eq!(expected.len(), parsed_comments.comments().len());
                 parsed_comments
                     .comments()
                     .iter()
                     .enumerate()
-                    .for_each(|(i,c)| assert_eq!(expected[i],c.kind().comment()));
-            },
+                    .for_each(|(i, c)| assert_eq!(expected[i], c.kind().comment()));
+            }
             "sql_files/with_mixed_comments.sql" => {
                 let expected = [
                     "Users table stores user account information",
@@ -504,18 +501,22 @@ fn parse_comments() {
                     "Main body text",
                     "When the post was created",
                 ];
-                assert_eq!(expected.len(),parsed_comments.comments().len());
+                assert_eq!(expected.len(), parsed_comments.comments().len());
                 parsed_comments
                     .comments()
                     .iter()
                     .enumerate()
-                    .for_each(|(i,c)| assert_eq!(expected[i],c.kind().comment()));
-
-            },
+                    .for_each(|(i, c)| assert_eq!(expected[i], c.kind().comment()));
+            }
             "sql_files/without_comments.sql" => {
                 assert_eq!(0, parsed_comments.comments.len());
-            },
-            _ => unreachable!("This shouldn't be accessible if directory parsed correctly and all test files accounted for"),
+            }
+            _ => {
+                unreachable!(
+                    "This shouldn't be accessible if directory parsed correctly and all test \
+                     files accounted for"
+                )
+            }
         }
     }
 }
@@ -523,7 +524,8 @@ fn parse_comments() {
 #[test]
 fn single_line_comment_spans_are_correct() {
     use std::path::Path;
-    use crate::{files::SqlFileSet, ast::ParsedSqlFileSet};
+
+    use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
     let path = Path::new("sql_files");
     let set = SqlFileSet::new(path, None).unwrap();
     let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap();
@@ -549,33 +551,24 @@ fn single_line_comment_spans_are_correct() {
     );
 }
 
-
 #[test]
 fn multiline_comment_spans_are_correct() {
     use std::path::Path;
-    use crate::{files::SqlFileSet, ast::ParsedSqlFileSet};
+
+    use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
     let path = Path::new("sql_files");
     let set = SqlFileSet::new(path, None).unwrap();
     let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap();
     let file = parsed_set
         .files()
         .iter()
-        .find(|f| {
-            f.file()
-                .path()
-                .to_str()
-                .unwrap()
-                .ends_with("with_multiline_comments.sql")
-        })
+        .find(|f| f.file().path().to_str().unwrap().ends_with("with_multiline_comments.sql"))
         .expect("with_multiline_comments.sql should be present");
     let comments = Comments::parse_all_comments_from_file(file).unwrap();
     let comments = comments.comments();
     assert_eq!(comments.len(), 11);
     let first = &comments[0];
-    assert_eq!(
-        first.kind().comment(),
-        "Users table stores user account information \nmultiline"
-    );
+    assert_eq!(first.kind().comment(), "Users table stores user account information \nmultiline");
     assert_eq!(first.span().start(), &Location::new(0, 0));
     assert_eq!(first.span().end().line(), 1);
     assert!(
@@ -583,10 +576,7 @@ fn multiline_comment_spans_are_correct() {
         "end column should be after start column for first multiline comment",
     );
     let primary_key = &comments[1];
-    assert_eq!(
-        primary_key.kind().comment(),
-        "Primary key \n    multiline"
-    );
+    assert_eq!(primary_key.kind().comment(), "Primary key \n    multiline");
     assert_eq!(primary_key.span().start(), &Location::new(3, 4));
     assert_eq!(primary_key.span().end().line(), 4);
     assert!(

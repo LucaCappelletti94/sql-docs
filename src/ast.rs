@@ -80,3 +80,55 @@ impl ParsedSqlFileSet {
         &self.files
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{env, fs};
+    use crate::files::{SqlFile, SqlFileSet};
+
+    #[test]
+    fn parsed_sql_file_parses_single_statement() {
+        let base = env::temp_dir().join("parsed_sql_file_single_stmt_test");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let file_path = base.join("one.sql");
+        let sql = "CREATE TABLE users (id INTEGER PRIMARY KEY);";
+        fs::write(&file_path, sql).unwrap();
+        let sql_file = SqlFile::new(&file_path).unwrap();
+        let parsed = ParsedSqlFile::parse(sql_file).unwrap();
+        assert_eq!(parsed.path(), file_path.as_path());
+        assert_eq!(parsed.content(), sql);
+        assert_eq!(parsed.statements().len(), 1);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn parsed_sql_file_set_parses_multiple_files() {
+        let base = env::temp_dir().join("parsed_sql_file_set_multi_test");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let sub = base.join("subdir");
+        fs::create_dir_all(&sub).unwrap();
+        let file1 = base.join("one.sql");
+        let file2 = sub.join("two.sql");
+        let sql1 = "CREATE TABLE users (id INTEGER PRIMARY KEY);";
+        let sql2 = "CREATE TABLE posts (id INTEGER PRIMARY KEY);";
+        fs::write(&file1, sql1).unwrap();
+        fs::write(&file2, sql2).unwrap();
+        let set = SqlFileSet::new(&base, None).unwrap();
+        let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap();
+        let files = parsed_set.files();
+        assert_eq!(files.len(), 2);
+        for parsed in files {
+            assert_eq!(parsed.statements().len(), 1);
+            let stmt = &parsed.statements()[0];
+            match stmt {
+                Statement::CreateTable { .. } => {}
+                other => panic!("expected CreateTable, got: {:?}", other),
+            }
+        }
+
+        let _ = fs::remove_dir_all(&base);
+    }
+}
