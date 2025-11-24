@@ -3,9 +3,9 @@
 //!
 //! *leading comment* a comment that
 //! precedes an SQL Statement.
-use std::{fmt, path::Path};
+use std::fmt;
 
-use crate::{ast::ParsedSqlFile, files::{SqlFile, SqlFilesList}};
+use crate::ast::ParsedSqlFile;
 
 /// Structure for holding a location in the file. Assumes file is first split by
 /// lines and then split by characters (column)
@@ -93,7 +93,17 @@ pub enum CommentKind {
     SingleLine(String),
 }
 
+impl CommentKind {
+    fn comment(&self) -> &str {
+        match self {
+            Self::MultiLine(comment) => comment,
+            Self::SingleLine(comment) => comment,
+        }
+    }
+}
+
 /// Structure for containing the [`CommentKind`] and the [`Span`] for a comment
+#[derive(Debug, PartialEq)]
 pub struct Comment {
     kind: CommentKind,
     span: Span,
@@ -125,10 +135,8 @@ impl Comment {
     /// Getter method that will return the comment content as a [`str`],
     /// regardless of [`CommentKind`]
     #[must_use]
-    pub const fn text(&self) -> &str {
-        match &self.kind {
-            CommentKind::SingleLine(s) | CommentKind::MultiLine(s) => s.as_str(),
-        }
+    pub fn text(&self) -> &str {
+        self.kind().comment()
     }
 }
 
@@ -143,8 +151,8 @@ pub enum CommentError {
     /// Found a multiline comment that is not properly terminated before EOF
     UnterminatedMultiLineComment {
         /// Returns the location of where the multiline comment started
-        start: Location
-    }
+        start: Location,
+    },
 }
 
 impl fmt::Display for CommentError {
@@ -157,7 +165,7 @@ impl fmt::Display for CommentError {
                     location.line(),
                     location.column()
                 )
-            },
+            }
             Self::UnterminatedMultiLineComment { start } => {
                 write!(
                     f,
@@ -207,6 +215,7 @@ impl CommentWithSpan {
 }
 
 /// Structure for holding all comments found in the document
+#[derive(Debug, PartialEq)]
 pub struct Comments {
     comments: Vec<Comment>,
 }
@@ -251,10 +260,12 @@ impl Comments {
     ///
     /// # Parameters
     /// - `src` which is the `SQL` file content as a [`str`]
-    /// 
+    ///
     /// # Errors
-    /// - `UnmatchedMultilineCommentStart` : will return error if unable to find a starting `/*` for a multiline comment
-    /// - `UnterminatedMultiLineComment` : will return error if there is an unterminated multiline comment, found at EOF
+    /// - `UnmatchedMultilineCommentStart` : will return error if unable to find
+    ///   a starting `/*` for a multiline comment
+    /// - `UnterminatedMultiLineComment` : will return error if there is an
+    ///   unterminated multiline comment, found at EOF
     pub fn scan_comments(src: &str) -> CommentResult<Self> {
         let mut comments = Vec::new();
 
@@ -265,77 +276,74 @@ impl Comments {
         let mut col = 0u64;
 
         let mut in_single = false;
-        let mut in_block = false;
-
+        let mut in_multi = false;
 
         let mut buf = String::new();
 
         let mut chars = src.chars().peekable();
 
-
         while let Some(c) = chars.next() {
-            match (in_single, in_block, c) {
+            match (in_single, in_multi, c) {
                 (false, false, '-') => {
                     if chars.peek().copied() == Some('-') {
-                        chars.next(); 
+                        chars.next();
                         in_single = true;
                         start_line = line;
-                        start_col = col; 
+                        start_col = col;
                         buf.clear();
-                        buf.push('-');
-                        buf.push('-');
                         col += 1;
                     }
-                },
+                }
                 (false, false, '/') => {
                     if chars.peek().copied() == Some('*') {
                         chars.next();
-                        in_block = true;
+                        in_multi = true;
                         start_line = line;
-                        start_col = col; 
+                        start_col = col;
                         buf.clear();
-                        col += 1; 
+                        col += 1;
                     }
-                },
+                }
                 (false, false, '*') => {
                     if chars.peek().copied() == Some('*') {
                         let loc = Location::new(line, col);
                         return Err(CommentError::UnmatchedMultilineCommentStart { location: loc });
                     }
-                },
+                }
                 (true, false, '\n') => {
                     let end_loc = Location::new(line, col);
                     comments.push(Comment::new(
-                        CommentKind::SingleLine(buf.clone()),
-                        Span::new(Location { line: start_line, column: start_col}, end_loc),
+                        CommentKind::SingleLine(buf.trim().to_string()),
+                        Span::new(Location { line: start_line, column: start_col }, end_loc),
                     ));
                     in_single = false;
                     buf.clear();
-                },
+                }
                 (false, true, '*') => {
-                    if chars.peek().copied() == Some('/'){
+                    if chars.peek().copied() == Some('/') {
                         chars.next();
-                        buf.push('*'); 
-                        buf.push('/'); 
                         let end_loc = Location::new(line, col + 1);
                         comments.push(Comment::new(
                             CommentKind::MultiLine(buf.trim().to_string()),
-                            Span::new(Location { line: start_line, column: start_col}, end_loc),
+                            Span::new(Location { line: start_line, column: start_col }, end_loc),
                         ));
-                        in_block = false;
+                        in_multi = false;
                         buf.clear();
                         col += 1;
                     } else {
                         buf.push('*');
-                    }    
-                },
+                    }
+                }
                 (false, true, '\n') => {
                     buf.push('\n');
-                },
-                (false, true, ch) | (true, false, ch)=> {
+                }
+                (false, true, ch) | (true, false, ch) => {
                     buf.push(ch);
-                },
-                (_, _, _) => unreachable!("cannot be in single-line and block comment at once"),
+                }
+                (false, false, _) => {}
+                (true, true, _) => {
+                    unreachable!("should not be possible to be in multiline and single line")
+                }
             }
             if c == '\n' {
                 line += 1;
@@ -346,15 +354,17 @@ impl Comments {
         }
 
         // EOF: close any open comments
-        if in_block {
-            return Err(CommentError::UnterminatedMultiLineComment { start: Location { line: start_line, column: start_col} });
+        if in_multi {
+            return Err(CommentError::UnterminatedMultiLineComment {
+                start: Location { line: start_line, column: start_col },
+            });
         }
 
         if in_single && !buf.is_empty() {
             let end_loc = Location::new(line, col);
             comments.push(Comment::new(
                 CommentKind::SingleLine(buf.trim_end().to_string()),
-                Span::new(Location { line: start_line, column: start_col}, end_loc),
+                Span::new(Location { line: start_line, column: start_col }, end_loc),
             ));
         }
 
@@ -369,7 +379,6 @@ impl Comments {
 }
 
 #[cfg(test)]
-
 #[test]
 fn location_new_and_default() {
     let mut location = Location::new(2, 5);
@@ -427,31 +436,161 @@ fn multiline_comment_span() {
 }
 
 #[test]
-fn parse_single_line_comments() {
-    use std::fs;
-    use crate::files::SqlFileSet;
-    use crate::ast::ParsedSqlFileSet;
+fn parse_comments() {
+    use std::path::Path;
+    use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
     let path = Path::new("sql_files");
     let set = SqlFileSet::new(path, None).unwrap();
     let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap();
     for file in parsed_set.files().iter() {
-        let parsed_comments = Comments::parse_all_comments_from_file(file).unwrap(); 
+        let parsed_comments = Comments::parse_all_comments_from_file(file).unwrap();
         match file.file().path().to_str().unwrap() {
-            "sql_files/with_comments.sql" => {
-                println!("succeeded!");
+            "sql_files/with_single_line_comments.sql" => {
+                let expected = [
+                    "Users table stores user account information",
+                    "Primary key",
+                    "Username for login",
+                    "Email address",
+                    "When the user registered",
+                    "Posts table stores blog posts",
+                    "Primary key",
+                    "Post title",
+                    "Foreign key linking to users",
+                    "Main body text",
+                    "When the post was created",
+                ];
+                assert_eq!(expected.len(),parsed_comments.comments().len());
+                parsed_comments
+                    .comments()
+                    .iter()
+                    .enumerate()
+                    .for_each(|(i,c)| 
+                    assert_eq!(expected[i],c.kind().comment()));
+
+                
+            },
+            "sql_files/with_multiline_comments.sql" => {
+                let expected = [
+                    "Users table stores user account information \nmultiline",
+                    "Primary key \n    multiline",
+                    "Username for login \n    multiline",
+                    "Email address \n    multiline",
+                    "When the user registered \n    multiline",
+                    "Posts table stores blog posts \nmultiline",
+                    "Primary key \n    multiline",
+                    "Post title \n    multiline",
+                    "Foreign key linking to users \n    multiline",
+                    "Main body text \n    multiline",
+                    "When the post was created \n    multiline",
+                ];
+                assert_eq!(expected.len(),parsed_comments.comments().len());
+                parsed_comments
+                    .comments()
+                    .iter()
+                    .enumerate()
+                    .for_each(|(i,c)| assert_eq!(expected[i],c.kind().comment()));
+            },
+            "sql_files/with_mixed_comments.sql" => {
+                let expected = [
+                    "Users table stores user account information",
+                    "Primary key",
+                    "Username for login",
+                    "Email address",
+                    "When the user registered",
+                    "Posts table stores blog posts",
+                    "Primary key",
+                    "Post title",
+                    "Foreign key linking to users",
+                    "Main body text",
+                    "When the post was created",
+                ];
+                assert_eq!(expected.len(),parsed_comments.comments().len());
+                parsed_comments
+                    .comments()
+                    .iter()
+                    .enumerate()
+                    .for_each(|(i,c)| assert_eq!(expected[i],c.kind().comment()));
+
             },
             "sql_files/without_comments.sql" => {
-
+                assert_eq!(0, parsed_comments.comments.len());
             },
-            _ => unreachable!("This shouldn't be accessible if directory parsed correctly")
+            _ => unreachable!("This shouldn't be accessible if directory parsed correctly and all test files accounted for"),
         }
     }
+}
 
-
+#[test]
+fn single_line_comment_spans_are_correct() {
+    use std::path::Path;
+    use crate::{files::SqlFileSet, ast::ParsedSqlFileSet};
+    let path = Path::new("sql_files");
+    let set = SqlFileSet::new(path, None).unwrap();
+    let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap();
+    let file = parsed_set
+        .files()
+        .iter()
+        .find(|f| f.file().path().to_str().unwrap().ends_with("with_single_line_comments.sql"))
+        .expect("with_single_line_comments.sql should be present");
+    let comments = Comments::parse_all_comments_from_file(file).unwrap();
+    let comments = comments.comments();
+    assert_eq!(comments.len(), 11);
+    let first = &comments[0];
+    assert_eq!(first.kind().comment(), "Users table stores user account information");
+    assert_eq!(first.span().start(), &Location::new(0, 0));
+    assert_eq!(first.span().end(), &Location::new(0, 46));
+    let primary_key = &comments[1];
+    assert_eq!(primary_key.kind().comment(), "Primary key");
+    assert_eq!(primary_key.span().start(), &Location::new(2, 4));
+    assert_eq!(primary_key.span().end(), &Location::new(2, 18));
+    assert!(
+        primary_key.span().end().column() > primary_key.span().start().column(),
+        "end column should be after start column",
+    );
 }
 
 
 #[test]
-fn parse_multi_line_comments() {
-    
+fn multiline_comment_spans_are_correct() {
+    use std::path::Path;
+    use crate::{files::SqlFileSet, ast::ParsedSqlFileSet};
+    let path = Path::new("sql_files");
+    let set = SqlFileSet::new(path, None).unwrap();
+    let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap();
+    let file = parsed_set
+        .files()
+        .iter()
+        .find(|f| {
+            f.file()
+                .path()
+                .to_str()
+                .unwrap()
+                .ends_with("with_multiline_comments.sql")
+        })
+        .expect("with_multiline_comments.sql should be present");
+    let comments = Comments::parse_all_comments_from_file(file).unwrap();
+    let comments = comments.comments();
+    assert_eq!(comments.len(), 11);
+    let first = &comments[0];
+    assert_eq!(
+        first.kind().comment(),
+        "Users table stores user account information \nmultiline"
+    );
+    assert_eq!(first.span().start(), &Location::new(0, 0));
+    assert_eq!(first.span().end().line(), 1);
+    assert!(
+        first.span().end().column() > first.span().start().column(),
+        "end column should be after start column for first multiline comment",
+    );
+    let primary_key = &comments[1];
+    assert_eq!(
+        primary_key.kind().comment(),
+        "Primary key \n    multiline"
+    );
+    assert_eq!(primary_key.span().start(), &Location::new(3, 4));
+    assert_eq!(primary_key.span().end().line(), 4);
+    assert!(
+        primary_key.span().end().column() > primary_key.span().start().column(),
+        "end column should be after start column for primary key multiline comment",
+    );
 }

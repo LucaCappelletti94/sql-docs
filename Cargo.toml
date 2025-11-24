@@ -6,24 +6,24 @@ description = "A crate for parsing comments from sql files and using them for do
 license = "GNU General Public License v3.0"
 repository = "https://github.com/rpg-alex/sql-docs"
 keywords = [
-    "sql",
-    "documentation",
-    "parser",
-    "sqlparser",
-    "filesystem",
-    "cli",
-    "schema",
-    "introspection",
-    "codegen",
-    "migrations",
+  "sql",
+  "documentation",
+  "parser",
+  "sqlparser",
+  "filesystem",
+  "cli",
+  "schema",
+  "introspection",
+  "codegen",
+  "migrations",
 ]
 
 categories = [
-    "database",
-    "development-tools",
-    "parser-implementations",
-    "text-processing",
-    "filesystem",
+  "database",
+  "development-tools",
+  "parser-implementations",
+  "text-processing",
+  "filesystem",
 ]
 
 
