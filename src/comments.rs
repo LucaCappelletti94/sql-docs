@@ -94,7 +94,8 @@ pub enum CommentKind {
 }
 
 impl CommentKind {
-    fn comment(&self) -> &str {
+    /// Getter for returning the comment from within the enum
+    pub fn comment(&self) -> &str {
         match self {
             Self::MultiLine(comment) | Self::SingleLine(comment) => comment,
         }

@@ -6,6 +6,7 @@ use crate::{ast::ParsedSqlFile, comments::Comments};
 
 /// Structure for containing the `name` of the `Column` and an [`Option`] for
 /// the comment as a [`String`]
+#[derive(Debug, PartialEq)]
 pub struct ColumnDoc {
     name: String,
     doc: Option<String>,
@@ -38,6 +39,7 @@ impl ColumnDoc {
 
 /// Structure for containing the `name` of the `Table`, an [`Option`] for the
 /// comment as a [`String`], and a `Vec` of [`ColumnDoc`] contained in the table
+#[derive(Debug,PartialEq)]
 pub struct TableDoc {
     name: String,
     doc: Option<String>,
@@ -81,6 +83,7 @@ impl TableDoc {
 
 /// Structure for containing the docs for every `Table` in an `.sql` file as a
 /// `Vec` of [`TableDoc`]
+#[derive(Debug, PartialEq)]
 pub struct SqlDocs {
     tables: Vec<TableDoc>,
 }
@@ -140,5 +143,110 @@ impl SqlDocs {
     #[must_use]
     pub fn tables(&self) -> &[TableDoc] {
         &self.tables
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::docs::{ColumnDoc, SqlDocs, TableDoc};
+
+    
+    #[test]
+    fn test_sql_docs_struct() {
+        let column_doc = ColumnDoc::new("id".to_string(), Some("The ID for the table".to_string()));
+        let columns = vec![column_doc];
+        let table_doc = TableDoc::new("user".to_string(), Some("The table for users".to_string()), columns);
+        let tables = vec![table_doc];
+        let sql_doc = SqlDocs::new(tables);
+        assert_eq!(sql_doc.tables().first().unwrap().name(), "user");
+        assert_eq!(sql_doc.tables().first().unwrap().columns().first().unwrap().name(), "id");
+    }
+    #[test]
+    fn generate_docs_from_mixed_comments() {
+        use std::path::Path;
+
+        use crate::{ast::ParsedSqlFileSet, files::SqlFileSet, comments::Comments};
+        let path = Path::new("sql_files");
+        let set = SqlFileSet::new(path, None).unwrap();
+        let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap();
+        for file in parsed_set.files().iter() {
+            let comments = Comments::parse_all_comments_from_file(file).unwrap();
+            let docs = SqlDocs::from_parsed_file(file, &comments);
+            match file.file().path().to_str().unwrap() {
+                "sql_files/with_single_line_comments.sql" => {
+                    let expected = [
+                        "Users table stores user account information",
+                        "Primary key",
+                        "Username for login",
+                        "Email address",
+                        "When the user registered",
+                        "Posts table stores blog posts",
+                        "Primary key",
+                        "Post title",
+                        "Foreign key linking to users",
+                        "Main body text",
+                        "When the post was created",
+                    ];
+                    assert_eq!(expected.len(), comments.comments().len());
+                    comments
+                        .comments()
+                        .iter()
+                        .enumerate()
+                        .for_each(|(i, c)| assert_eq!(expected[i], c.kind().comment()));
+                }
+                "sql_files/with_multiline_comments.sql" => {
+                    let expected = [
+                        "Users table stores user account information \nmultiline",
+                        "Primary key \n    multiline",
+                        "Username for login \n    multiline",
+                        "Email address \n    multiline",
+                        "When the user registered \n    multiline",
+                        "Posts table stores blog posts \nmultiline",
+                        "Primary key \n    multiline",
+                        "Post title \n    multiline",
+                        "Foreign key linking to users \n    multiline",
+                        "Main body text \n    multiline",
+                        "When the post was created \n    multiline",
+                    ];
+                    assert_eq!(expected.len(), comments.comments().len());
+                    comments
+                        .comments()
+                        .iter()
+                        .enumerate()
+                        .for_each(|(i, c)| assert_eq!(expected[i], c.kind().comment()));
+                }
+                "sql_files/with_mixed_comments.sql" => {
+                    let expected = [
+                        "Users table stores user account information",
+                        "Primary key",
+                        "Username for login",
+                        "Email address",
+                        "When the user registered",
+                        "Posts table stores blog posts",
+                        "Primary key",
+                        "Post title",
+                        "Foreign key linking to users",
+                        "Main body text",
+                        "When the post was created",
+                    ];
+                    assert_eq!(expected.len(), comments.comments().len());
+                    comments
+                        .comments()
+                        .iter()
+                        .enumerate()
+                        .for_each(|(i, c)| assert_eq!(expected[i], c.kind().comment()));
+                }
+                "sql_files/without_comments.sql" => {
+                    assert_eq!(0, comments.comments().len());
+                }
+                _ => {
+                    unreachable!(
+                        "This shouldn't be accessible if directory parsed correctly and all test \
+                        files accounted for"
+                    )
+                }
+            }
+
+        }
     }
 }
