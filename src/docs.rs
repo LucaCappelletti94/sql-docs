@@ -1,11 +1,12 @@
-//! Module for parsing sql and comments and returning `table` and `column` information, including comments
+//! Module for parsing sql and comments and returning `table` and `column`
+//! information, including comments
 use sqlparser::ast::{Spanned, Statement};
 
 use crate::{ast::ParsedSqlFile, comments::Comments};
 
 /// Structure for containing the `name` of the `Column` and an [`Option`] for
 /// the comment as a [`String`]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ColumnDoc {
     name: String,
     doc: Option<String>,
@@ -38,7 +39,7 @@ impl ColumnDoc {
 
 /// Structure for containing the `name` of the `Table`, an [`Option`] for the
 /// comment as a [`String`], and a `Vec` of [`ColumnDoc`] contained in the table
-#[derive(Debug,PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct TableDoc {
     name: String,
     doc: Option<String>,
@@ -82,7 +83,7 @@ impl TableDoc {
 
 /// Structure for containing the docs for every `Table` in an `.sql` file as a
 /// `Vec` of [`TableDoc`]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct SqlDocs {
     tables: Vec<TableDoc>,
 }
@@ -99,6 +100,7 @@ impl SqlDocs {
     #[must_use]
     pub fn from_parsed_file(file: &ParsedSqlFile, comments: &Comments) -> Self {
         let mut tables = Vec::new();
+        dbg!(comments);
         for statement in file.statements() {
             #[allow(clippy::single_match)]
             match statement {
@@ -107,10 +109,7 @@ impl SqlDocs {
                     let mut column_docs = Vec::new();
                     for column in &table.columns {
                         let column_start = column.span().start.line;
-                        dbg!(&column_start);
-                        dbg!(&column.span().end.line);
-                        dbg!(&column.name);
-                        let column_leading = comments.leading_comment_column(column_start);
+                        let column_leading = comments.leading_comment(column_start);
                         let column_name = column.name.value.clone();
                         let column_doc = match column_leading {
                             Some(col_comment) => {
@@ -120,10 +119,7 @@ impl SqlDocs {
                         };
                         column_docs.push(column_doc);
                     }
-                    let table_leading = comments.leading_comment(table_start-1);
-                    dbg!(&table_start);
-                    dbg!(&table.span().end.line);
-                    dbg!(&table.name);
+                    let table_leading = comments.leading_comment(table_start);
                     let table_doc = match table_leading {
                         Some(comment) => {
                             TableDoc::new(
@@ -155,19 +151,19 @@ impl SqlDocs {
 mod tests {
     use crate::docs::{ColumnDoc, SqlDocs, TableDoc};
 
-    
     #[test]
     fn test_sql_docs_struct() {
         let column_doc = ColumnDoc::new("id".to_string(), Some("The ID for the table".to_string()));
         let columns = vec![column_doc];
-        let table_doc = TableDoc::new("user".to_string(), Some("The table for users".to_string()), columns);
+        let table_doc =
+            TableDoc::new("user".to_string(), Some("The table for users".to_string()), columns);
         let tables = vec![table_doc];
         let sql_doc = SqlDocs::new(tables);
         assert_eq!(sql_doc.tables().first().unwrap().name(), "user");
         assert_eq!(sql_doc.tables().first().unwrap().columns().first().unwrap().name(), "id");
     }
 
-        #[test]
+    #[test]
     fn generate_docs_files() {
         use std::path::Path;
 
@@ -183,6 +179,7 @@ mod tests {
 
             match file.file().path().to_str().unwrap() {
                 "sql_files/with_single_line_comments.sql" => {
+                    dbg!("testing with single line comments");
                     let expected = SqlDocs::new(vec![
                         TableDoc::new(
                             "users".to_string(),
@@ -208,10 +205,7 @@ mod tests {
                             Some("Posts table stores blog posts".to_string()),
                             vec![
                                 ColumnDoc::new("id".to_string(), Some("Primary key".to_string())),
-                                ColumnDoc::new(
-                                    "title".to_string(),
-                                    Some("Post title".to_string()),
-                                ),
+                                ColumnDoc::new("title".to_string(), Some("Post title".to_string())),
                                 ColumnDoc::new(
                                     "user_id".to_string(),
                                     Some("Foreign key linking to users".to_string()),
@@ -231,10 +225,14 @@ mod tests {
                     assert_eq!(docs, expected);
                 }
                 "sql_files/with_multiline_comments.sql" => {
+                    dbg!("testing with multiline comments");
                     let expected = SqlDocs::new(vec![
                         TableDoc::new(
                             "users".to_string(),
-                            Some("Users table stores user account information \nmultiline".to_string()),
+                            Some(
+                                "Users table stores user account information \nmultiline"
+                                    .to_string(),
+                            ),
                             vec![
                                 ColumnDoc::new(
                                     "id".to_string(),
@@ -268,7 +266,9 @@ mod tests {
                                 ),
                                 ColumnDoc::new(
                                     "user_id".to_string(),
-                                    Some("Foreign key linking to users \n    multiline".to_string()),
+                                    Some(
+                                        "Foreign key linking to users \n    multiline".to_string(),
+                                    ),
                                 ),
                                 ColumnDoc::new(
                                     "body".to_string(),
@@ -285,7 +285,9 @@ mod tests {
                     assert_eq!(docs, expected);
                 }
                 "sql_files/with_mixed_comments.sql" => {
-                    // Mixed should still produce the same final docs as the pure single-line version.
+                    dbg!("testing with mixed comments");
+                    // Mixed should still produce the same final docs as the pure single-line
+                    // version.
                     let expected = SqlDocs::new(vec![
                         TableDoc::new(
                             "users".to_string(),
@@ -311,10 +313,7 @@ mod tests {
                             Some("Posts table stores blog posts".to_string()),
                             vec![
                                 ColumnDoc::new("id".to_string(), Some("Primary key".to_string())),
-                                ColumnDoc::new(
-                                    "title".to_string(),
-                                    Some("Post title".to_string()),
-                                ),
+                                ColumnDoc::new("title".to_string(), Some("Post title".to_string())),
                                 ColumnDoc::new(
                                     "user_id".to_string(),
                                     Some("Foreign key linking to users".to_string()),
@@ -334,6 +333,7 @@ mod tests {
                     assert_eq!(docs, expected);
                 }
                 "sql_files/without_comments.sql" => {
+                    dbg!("testing with no comments");
                     let expected = SqlDocs::new(vec![
                         TableDoc::new(
                             "users".to_string(),
@@ -363,11 +363,10 @@ mod tests {
                 _ => {
                     unreachable!(
                         "This shouldn't be accessible if directory parsed correctly and all test \
-                        files accounted for"
+                         files accounted for"
                     )
                 }
             }
         }
     }
-
 }

@@ -41,7 +41,7 @@ impl Location {
 
 impl Default for Location {
     fn default() -> Self {
-        Self::new(0, 0)
+        Self::new(1, 1)
     }
 }
 
@@ -95,6 +95,7 @@ pub enum CommentKind {
 
 impl CommentKind {
     /// Getter for returning the comment from within the enum
+    #[must_use]
     pub fn comment(&self) -> &str {
         match self {
             Self::MultiLine(comment) | Self::SingleLine(comment) => comment,
@@ -269,11 +270,11 @@ impl Comments {
     pub fn scan_comments(src: &str) -> CommentResult<Self> {
         let mut comments = Vec::new();
 
-        let mut start_line = 0u64;
-        let mut start_col = 0u64;
+        let mut start_line = 1u64;
+        let mut start_col = 1u64;
 
-        let mut line = 0u64;
-        let mut col = 0u64;
+        let mut line = 1u64;
+        let mut col = 1u64;
 
         let mut in_single = false;
         let mut in_multi = false;
@@ -339,7 +340,7 @@ impl Comments {
                 }
                 (false, true, ch) | (true, false, ch) => {
                     buf.push(ch);
-                },
+                }
                 (false, false, _) => {}
                 (true, true, _) => {
                     unreachable!("should not be possible to be in multiline and single line")
@@ -387,21 +388,6 @@ impl Comments {
     pub fn leading_comment(&self, line: u64) -> Option<&Comment> {
         self.comments().iter().rev().find(|comment| comment.span().end().line() + 1 == line)
     }
-
-    /// Helper method for checking and finding for a comment before a specific
-    /// line for columns (hopefully temporary)
-    ///
-    /// # Parameters
-    /// - `self` an instance of [`Comments`]
-    /// - `line` an `u64` value representing the desired line to check above.
-    #[must_use]
-    pub fn leading_comment_column(&self, line: u64) -> Option<&Comment> {
-        dbg!(line);
-        let line = line -2;
-        let com = self.comments().iter().rev().find(|comment| comment.span().end().line() == line);
-        dbg!(&com);
-        com
-    }
 }
 
 #[cfg(test)]
@@ -414,7 +400,7 @@ fn location_new_and_default() {
     assert_eq!(Location { column: 20, line: 43 }, location);
 
     let location2 = Location::default();
-    assert_eq!(location2, Location { line: 0, column: 0 });
+    assert_eq!(location2, Location { line: 1, column: 1 });
 }
 
 #[test]
@@ -444,7 +430,7 @@ fn comments_with_comment_kind() {
     assert_eq!(comment.kind, singleline);
 
     let expected_span =
-        Span::new(Location { line: 0, column: 0 }, Location { line: 0, column: len - 1 });
+        Span::new(Location { line: 1, column: 1 }, Location { line: 1, column: len - 1 });
 
     assert_eq!(comment.span, expected_span);
 }
@@ -452,7 +438,7 @@ fn comments_with_comment_kind() {
 #[test]
 fn multiline_comment_span() {
     let kind = CommentKind::MultiLine("/* hello\nworld */".to_string());
-    let span = Span::new(Location { line: 1, column: 0 }, Location { line: 2, column: 9 });
+    let span = Span::new(Location { line: 1, column: 1 }, Location { line: 2, column: 9 });
 
     let comment = Comment::new(kind.clone(), span);
 
@@ -516,8 +502,11 @@ fn parse_comments() {
             }
             "sql_files/with_mixed_comments.sql" => {
                 let expected = [
+                    "interstitial Comment above statements (should be ignored)",
                     "Users table stores user account information",
+                    "users interstitial comment \n(should be ignored)",
                     "Primary key",
+                    "Id comment that is interstitial (should be ignored)",
                     "Username for login",
                     "Email address",
                     "When the user registered",
@@ -566,12 +555,12 @@ fn single_line_comment_spans_are_correct() {
     assert_eq!(comments.len(), 11);
     let first = &comments[0];
     assert_eq!(first.kind().comment(), "Users table stores user account information");
-    assert_eq!(first.span().start(), &Location::new(0, 0));
-    assert_eq!(first.span().end(), &Location::new(0, 46));
+    assert_eq!(first.span().start(), &Location::new(1, 1));
+    assert_eq!(first.span().end(), &Location::new(1, 47));
     let primary_key = &comments[1];
     assert_eq!(primary_key.kind().comment(), "Primary key");
-    assert_eq!(primary_key.span().start(), &Location::new(2, 4));
-    assert_eq!(primary_key.span().end(), &Location::new(2, 18));
+    assert_eq!(primary_key.span().start(), &Location::new(3, 4));
+    assert_eq!(primary_key.span().end(), &Location::new(3, 18));
     assert!(
         primary_key.span().end().column() > primary_key.span().start().column(),
         "end column should be after start column",
@@ -596,16 +585,16 @@ fn multiline_comment_spans_are_correct() {
     assert_eq!(comments.len(), 11);
     let first = &comments[0];
     assert_eq!(first.kind().comment(), "Users table stores user account information \nmultiline");
-    assert_eq!(first.span().start(), &Location::new(0, 0));
-    assert_eq!(first.span().end().line(), 1);
+    assert_eq!(first.span().start(), &Location::new(1, 1));
+    assert_eq!(first.span().end().line(), 2);
     assert!(
         first.span().end().column() > first.span().start().column(),
         "end column should be after start column for first multiline comment",
     );
     let primary_key = &comments[1];
     assert_eq!(primary_key.kind().comment(), "Primary key \n    multiline");
-    assert_eq!(primary_key.span().start(), &Location::new(3, 4));
-    assert_eq!(primary_key.span().end().line(), 4);
+    assert_eq!(primary_key.span().start(), &Location::new(4, 4));
+    assert_eq!(primary_key.span().end().line(), 5);
     assert!(
         primary_key.span().end().column() > primary_key.span().start().column(),
         "end column should be after start column for primary key multiline comment",

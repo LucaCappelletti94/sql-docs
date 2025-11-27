@@ -1,7 +1,10 @@
+-- interstitial Comment above statements (should be ignored)
+
 /* Users table stores user account information */
-CREATE TABLE users (
+CREATE TABLE users ( /* users interstitial comment 
+(should be ignored) */
     -- Primary key
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY, -- Id comment that is interstitial (should be ignored)
     /* Username for login */
     username VARCHAR(255) NOT NULL,
     -- Email address
