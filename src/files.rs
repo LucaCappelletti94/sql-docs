@@ -33,7 +33,12 @@ pub struct SqlFilesList {
 }
 
 impl SqlFilesList {
-    /// Recursively scans `path` for `.sql` files and returns a filtered list.
+    /// Creates a list of `.sql` files under `path`, optionally excluding files
+    /// whose full paths appear in `deny_list`.
+    ///
+    /// Paths in `deny_list` must match exactly the `PathBuf` returned by recursion.
+    /// For convenience, the top-level API accepts `&[&str]` instead.
+    /// 
     /// # Parameters
     ///
     /// - `path`: any type that implements [`AsRef<Path>`].
@@ -70,8 +75,14 @@ impl SqlFilesList {
     }
 }
 
-/// Helper function that recursively scans a directory for `.sql` files given a
-/// [`Path`] as parameter
+/// Recursively scans the directory for `.sql` files.
+///
+/// This function:
+/// - Walks subdirectories
+/// - Collects *only* `.sql` files
+/// - Returns paths in discovery order
+///
+/// This does **not** load file contents. See [`SqlFile`] for that.
 fn recursive_dir_scan(path: &Path) -> io::Result<Vec<PathBuf>> {
     let mut sql_files = Vec::new();
     for entry in fs::read_dir(path)? {

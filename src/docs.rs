@@ -90,13 +90,24 @@ pub struct SqlDocs {
 
 impl SqlDocs {
     /// Create a new instance of [`SqlDocs`]
+    /// 
+    /// # Parameters
+    /// - `tables` the `Vec` of [`TableDoc`] for the struct
     #[must_use]
     pub const fn new(tables: Vec<TableDoc>) -> Self {
         Self { tables }
     }
 
-    /// Builds documentation for sql file by attaching leading comments to
-    /// tables and columns
+    /// Final structured documentation extracted from one SQL file.
+    ///
+    /// This merges:
+    /// - Parsed SQL AST (`CREATE TABLE` statements for example)
+    /// - Comment spans
+    /// into a format suitable for documentation generation.
+    /// 
+    /// # Parameters
+    /// - `file`: the [`ParsedSqlFile`] 
+    /// - `comments`: the parsed [`Comments`]
     #[must_use]
     pub fn from_parsed_file(file: &ParsedSqlFile, comments: &Comments) -> Self {
         let mut tables = Vec::new();

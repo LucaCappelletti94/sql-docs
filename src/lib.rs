@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 //! Module layout:
 //! - [`files`]    : discover and load `.sql` files from disk
 //! - [`ast`]      : parse SQL into an AST using [`sqlparser`]
@@ -84,6 +85,12 @@ impl From<ParserError> for DocError {
 /// # Errors
 /// - Will return a `DocError` that  specifies the error (io, comment parsing,
 ///   sql parsing)
+/// 
+/// # Example
+/// ```no_run
+/// use sql_docs::generate_docs_from_dir;
+/// let docs = generate_docs_from_dir("sql_dir", &["skip_this.sql"])?;
+/// ```
 pub fn generate_docs_from_dir<P: AsRef<Path>, S: AsRef<str>>(
     dir: P,
     deny_list: &[S],
@@ -117,6 +124,12 @@ pub fn generate_docs_from_dir<P: AsRef<Path>, S: AsRef<str>>(
 /// # Errors
 /// - Will return a `DocError` that  specifies the error (io, comment parsing,
 ///   sql parsing)
+/// 
+/// # Example
+/// ```no_run
+/// use sql_docs::generate_docs_from_dir;
+/// let docs = generate_docs_from_dir_no_deny("sql_dir")?;
+/// ```
 pub fn generate_docs_from_dir_no_deny<P: AsRef<Path>>(
     dir: P,
 ) -> Result<Vec<(PathBuf, SqlDocs)>, DocError> {

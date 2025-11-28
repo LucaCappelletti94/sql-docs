@@ -5,6 +5,7 @@ edition = "2024"
 description = "A crate for parsing comments from sql files and using them for documentation generation"
 license = "GNU General Public License v3.0"
 repository = "https://github.com/rpg-alex/sql-docs"
+readme = "README.md"
 keywords = [
   "sql",
   "documentation",
