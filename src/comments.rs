@@ -249,9 +249,10 @@ impl Comments {
     /// - `file`: the [`ParsedSqlFile`] that needs to be parsed for comments
     ///
     /// # Errors
-    /// - Will return [`CommentError::UnmatchedMultilineCommentStart`] if a comment
-    ///   does not have an opening `/*`
-    /// - Will return [`CommentError::UnterminatedMultiLineComment`] if a multiline comment doesn't end before `EOF`
+    /// - Will return [`CommentError::UnmatchedMultilineCommentStart`] if a
+    ///   comment does not have an opening `/*`
+    /// - Will return [`CommentError::UnterminatedMultiLineComment`] if a
+    ///   multiline comment doesn't end before `EOF`
     pub fn parse_all_comments_from_file(file: &ParsedSqlFile) -> CommentResult<Self> {
         let src = file.content();
         let comments = Self::scan_comments(src)?;

@@ -17,10 +17,11 @@ pub struct ParsedSqlFile {
 }
 
 impl ParsedSqlFile {
-    /// A parsed SQL file containing DataFusion AST nodes paired with their spans.
+    /// A parsed SQL file containing `DataFusion` AST nodes paired with their
+    /// spans.
     ///
-    /// This struct wraps DataFusion’s `Statement` parsing so we can attach leading
-    /// comments later in the pipeline.
+    /// This struct wraps DataFusion’s `Statement` parsing so we can attach
+    /// leading comments later in the pipeline.
     ///
     /// # Parameters
     /// - `file` is the [`SqlFile`] that will be parsed

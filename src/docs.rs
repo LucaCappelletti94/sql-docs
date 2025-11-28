@@ -90,7 +90,7 @@ pub struct SqlDocs {
 
 impl SqlDocs {
     /// Create a new instance of [`SqlDocs`]
-    /// 
+    ///
     /// # Parameters
     /// - `tables` the `Vec` of [`TableDoc`] for the struct
     #[must_use]
@@ -102,11 +102,10 @@ impl SqlDocs {
     ///
     /// This merges:
     /// - Parsed SQL AST (`CREATE TABLE` statements for example)
-    /// - Comment spans
-    /// into a format suitable for documentation generation.
-    /// 
+    /// - Comment spans into a format suitable for documentation generation.
+    ///
     /// # Parameters
-    /// - `file`: the [`ParsedSqlFile`] 
+    /// - `file`: the [`ParsedSqlFile`]
     /// - `comments`: the parsed [`Comments`]
     #[must_use]
     pub fn from_parsed_file(file: &ParsedSqlFile, comments: &Comments) -> Self {

@@ -36,9 +36,10 @@ impl SqlFilesList {
     /// Creates a list of `.sql` files under `path`, optionally excluding files
     /// whose full paths appear in `deny_list`.
     ///
-    /// Paths in `deny_list` must match exactly the `PathBuf` returned by recursion.
-    /// For convenience, the top-level API accepts `&[&str]` instead.
-    /// 
+    /// Paths in `deny_list` must match exactly the `PathBuf` returned by
+    /// recursion. For convenience, the top-level API accepts `&[&str]`
+    /// instead.
+    ///
     /// # Parameters
     ///
     /// - `path`: any type that implements [`AsRef<Path>`].

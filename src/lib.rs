@@ -85,7 +85,7 @@ impl From<ParserError> for DocError {
 /// # Errors
 /// - Will return a `DocError` that  specifies the error (io, comment parsing,
 ///   sql parsing)
-/// 
+///
 /// # Example
 /// ```no_run
 /// use sql_docs::generate_docs_from_dir;
@@ -124,7 +124,7 @@ pub fn generate_docs_from_dir<P: AsRef<Path>, S: AsRef<str>>(
 /// # Errors
 /// - Will return a `DocError` that  specifies the error (io, comment parsing,
 ///   sql parsing)
-/// 
+///
 /// # Example
 /// ```no_run
 /// use sql_docs::generate_docs_from_dir;
