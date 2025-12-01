@@ -188,7 +188,6 @@ mod tests {
 
             match file.file().path().to_str().unwrap() {
                 "sql_files/with_single_line_comments.sql" => {
-                    dbg!("testing with single line comments");
                     let expected = SqlDocs::new(vec![
                         TableDoc::new(
                             "users".to_string(),
@@ -234,7 +233,6 @@ mod tests {
                     assert_eq!(docs, expected);
                 }
                 "sql_files/with_multiline_comments.sql" => {
-                    dbg!("testing with multiline comments");
                     let expected = SqlDocs::new(vec![
                         TableDoc::new(
                             "users".to_string(),
@@ -294,7 +292,6 @@ mod tests {
                     assert_eq!(docs, expected);
                 }
                 "sql_files/with_mixed_comments.sql" => {
-                    dbg!("testing with mixed comments");
                     // Mixed should still produce the same final docs as the pure single-line
                     // version.
                     let expected = SqlDocs::new(vec![
@@ -342,7 +339,6 @@ mod tests {
                     assert_eq!(docs, expected);
                 }
                 "sql_files/without_comments.sql" => {
-                    dbg!("testing with no comments");
                     let expected = SqlDocs::new(vec![
                         TableDoc::new(
                             "users".to_string(),
@@ -378,5 +374,4 @@ mod tests {
             }
         }
     }
-
 }

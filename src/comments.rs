@@ -9,7 +9,7 @@ use crate::ast::ParsedSqlFile;
 
 /// Structure for holding a location in the file. Assumes file is first split by
 /// lines and then split by characters (column)
-#[derive(Debug, Eq, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Location {
     line: u64,
     column: u64,
@@ -46,7 +46,7 @@ impl Default for Location {
 }
 
 /// A structure for holding the span of comments found
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Span {
     start: Location,
     end: Location,
@@ -104,7 +104,7 @@ impl CommentKind {
 }
 
 /// Structure for containing the [`CommentKind`] and the [`Span`] for a comment
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Comment {
     kind: CommentKind,
     span: Span,
@@ -183,37 +183,6 @@ impl std::error::Error for CommentError {}
 
 /// Alias for comment results that may return a [`CommentError`]
 pub type CommentResult<T> = Result<T, CommentError>;
-
-/// Structure that holds the comment along with its location in the file
-pub struct CommentWithSpan {
-    comment: Comment,
-    span: Span,
-}
-
-impl CommentWithSpan {
-    /// Method for creating a new [`CommentWithSpan`] from the comment
-    /// [`String`] and the [`Span`]
-    ///
-    /// # Parameters
-    /// - the comment as a [`String`]
-    /// - the span of the comment as a [`Span`]
-    #[must_use]
-    pub const fn new(comment: Comment, span: Span) -> Self {
-        Self { comment, span }
-    }
-
-    /// Getter method for retrieving the comment content
-    #[must_use]
-    pub const fn comment(&self) -> &Comment {
-        &self.comment
-    }
-
-    /// Getter method for retrieving the [`Span`] of the comment
-    #[must_use]
-    pub const fn span(&self) -> &Span {
-        &self.span
-    }
-}
 
 /// Structure for holding all comments found in the document
 #[derive(Debug, Eq, PartialEq)]
@@ -601,4 +570,38 @@ fn multiline_comment_spans_are_correct() {
         primary_key.span().end().column() > primary_key.span().start().column(),
         "end column should be after start column for primary key multiline comment",
     );
+}
+
+#[test]
+fn test_comment_error() {
+    let unterminated = CommentError::UnterminatedMultiLineComment { start: Location::default() };
+    let location = Location { line: 1, column: 1 };
+    let expected = format!(
+        "unterminated block comment with start at line {}, column {}",
+        location.line(),
+        location.column()
+    );
+    assert_eq!(unterminated.to_string(), expected);
+}
+
+#[test]
+fn test_comments() {
+    let comment_vec = vec![
+        Comment::new(
+            CommentKind::SingleLine("a comment".to_string()),
+            Span { start: Location::new(1, 1), end: Location::new(1, 12) },
+        ),
+        Comment::new(
+            CommentKind::SingleLine("a second comment".to_string()),
+            Span { start: Location::new(1, 1), end: Location::new(2, 19) },
+        ),
+    ];
+    let length = comment_vec.len();
+    let comments = Comments::new(comment_vec.clone());
+    assert!(comments.comments().len() == length);
+    for (i, comment) in comments.comments().iter().enumerate() {
+        assert_eq!(comment.kind().comment(), comment_vec[i].kind().comment());
+        assert_eq!(comment.span().start(), comment_vec[i].span().start());
+        assert_eq!(comment.span().end(), comment_vec[i].span().end());
+    }
 }

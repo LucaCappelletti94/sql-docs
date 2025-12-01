@@ -303,7 +303,5 @@ mod tests {
 
         let bad_file_list = SqlFileSet::new(Path::new(invalid_dir), None);
         assert!(bad_file_list.is_err())
-
     }
 }
-
