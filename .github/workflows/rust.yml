@@ -79,8 +79,6 @@ jobs:
       uses: dtolnay/rust-toolchain@stable
       with:
         components: clippy
-    - name: Install SQLite
-      run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
     - name: Run clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -106,7 +104,7 @@ jobs:
     - name: Install tarpaulin
       run: cargo install cargo-tarpaulin
     - name: Generate coverage
-      run: cargo tarpaulin --verbose --engine=llvm --all-features --timeout 120 --out xml -p diesel-builders
+      run: cargo tarpaulin --verbose --engine=llvm --all-features --timeout 120 --out xml -p sql_docs
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       with:
