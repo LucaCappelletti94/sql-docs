@@ -177,67 +177,75 @@ mod tests {
     }
 
     #[test]
-    fn generate_docs_files() {
+    fn generate_docs_files() -> Result<(), Box<dyn std::error::Error>> {
         use crate::{ast::ParsedSqlFileSet, comments::Comments, files::SqlFileSet};
         use std::path::Path;
         let path = Path::new("sql_files");
-        let set = SqlFileSet::new(path, None).unwrap_or_else(|e| panic!("panicked on {e}"));
-        let parsed_set =
-            ParsedSqlFileSet::parse_all(set).unwrap_or_else(|e| panic!("panicked on {e}"));
+        let set = SqlFileSet::new(path, None)?;
+        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
+        let expected_values = expect_values();
+
         for file in parsed_set.files() {
-            let comments = Comments::parse_all_comments_from_file(file)
-                .unwrap_or_else(|e| panic!("panicked on {e}"));
+            let comments = Comments::parse_all_comments_from_file(file)?;
             let docs = SqlDocs::from_parsed_file(file, &comments);
-            let file_found = file
+            let filename = file
                 .file()
                 .path()
-                .to_str()
-                .map_or_else(|| panic!("unable to stringify path"), |val| val);
-            let expected_values = expect_values();
-            match file_found {
-                "sql_files/with_single_line_comments.sql" | "sql_files/with_mixed_comments.sql" => {
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map_or_else(|| panic!("unable to find file name"), |val| val);
+
+            match filename {
+                "with_single_line_comments.sql" | "with_mixed_comments.sql" => {
                     assert_eq!(&docs, &expected_values[0]);
                 }
-                "sql_files/with_multiline_comments.sql" => {
+                "with_multiline_comments.sql" => {
                     assert_eq!(&docs, &expected_values[1]);
                 }
-                "sql_files/without_comments.sql" => {
-                    let expected = SqlDocs::new(vec![
-                        TableDoc::new(
-                            "users".to_string(),
-                            None,
-                            vec![
-                                ColumnDoc::new("id".to_string(), None),
-                                ColumnDoc::new("username".to_string(), None),
-                                ColumnDoc::new("email".to_string(), None),
-                                ColumnDoc::new("created_at".to_string(), None),
-                            ],
-                        ),
-                        TableDoc::new(
-                            "posts".to_string(),
-                            None,
-                            vec![
-                                ColumnDoc::new("id".to_string(), None),
-                                ColumnDoc::new("title".to_string(), None),
-                                ColumnDoc::new("user_id".to_string(), None),
-                                ColumnDoc::new("body".to_string(), None),
-                                ColumnDoc::new("published_at".to_string(), None),
-                            ],
-                        ),
-                    ]);
+                "without_comments.sql" => {
+                    let expected = expected_without_comments_docs();
                     assert_eq!(&docs, &expected);
                 }
-                _ => {
+                other => {
                     unreachable!(
-                        "This shouldn't be accessible if directory parsed correctly and all test \
-                         files accounted for"
-                    )
+                        "unexpected test file {other}; directory should only contain known test files"
+                    );
                 }
             }
         }
+
+        Ok(())
     }
+
+    fn expected_without_comments_docs() -> SqlDocs {
+        SqlDocs::new(vec![
+            TableDoc::new(
+                "users".to_string(),
+                None,
+                vec![
+                    ColumnDoc::new("id".to_string(), None),
+                    ColumnDoc::new("username".to_string(), None),
+                    ColumnDoc::new("email".to_string(), None),
+                    ColumnDoc::new("created_at".to_string(), None),
+                ],
+            ),
+            TableDoc::new(
+                "posts".to_string(),
+                None,
+                vec![
+                    ColumnDoc::new("id".to_string(), None),
+                    ColumnDoc::new("title".to_string(), None),
+                    ColumnDoc::new("user_id".to_string(), None),
+                    ColumnDoc::new("body".to_string(), None),
+                    ColumnDoc::new("published_at".to_string(), None),
+                ],
+            ),
+        ])
+    }
+
     fn expect_values() -> Vec<SqlDocs> {
         let mut docs = Vec::new();
+
         let first_docs = SqlDocs::new(vec![
             TableDoc::new(
                 "users".to_string(),
@@ -271,6 +279,7 @@ mod tests {
             ),
         ]);
         docs.push(first_docs);
+
         let second_docs = SqlDocs::new(vec![
             TableDoc::new(
                 "users".to_string(),
@@ -322,6 +331,7 @@ mod tests {
             ),
         ]);
         docs.push(second_docs);
+
         docs
     }
 }

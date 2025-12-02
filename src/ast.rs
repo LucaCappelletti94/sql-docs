@@ -93,37 +93,37 @@ mod tests {
     use crate::files::{SqlFile, SqlFileSet};
 
     #[test]
-    fn parsed_sql_file_parses_single_statement() {
+    fn parsed_sql_file_parses_single_statement() -> Result<(), Box<dyn std::error::Error>> {
         let base = env::temp_dir().join("parsed_sql_file_single_stmt_test");
         let _ = fs::remove_dir_all(&base);
-        fs::create_dir_all(&base).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::create_dir_all(&base)?;
         let file_path = base.join("one.sql");
         let sql = "CREATE TABLE users (id INTEGER PRIMARY KEY);";
-        fs::write(&file_path, sql).unwrap_or_else(|e| panic!("panicked on {e}"));
-        let sql_file = SqlFile::new(&file_path).unwrap_or_else(|e| panic!("panicked on {e}"));
-        let parsed = ParsedSqlFile::parse(sql_file).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::write(&file_path, sql)?;
+        let sql_file = SqlFile::new(&file_path)?;
+        let parsed = ParsedSqlFile::parse(sql_file)?;
         assert_eq!(parsed.path(), file_path.as_path());
         assert_eq!(parsed.content(), sql);
         assert_eq!(parsed.statements().len(), 1);
         let _ = fs::remove_dir_all(&base);
+        Ok(())
     }
 
     #[test]
-    fn parsed_sql_file_set_parses_multiple_files() {
+    fn parsed_sql_file_set_parses_multiple_files() -> Result<(), Box<dyn std::error::Error>> {
         let base = env::temp_dir().join("parsed_sql_file_set_multi_test");
         let _ = fs::remove_dir_all(&base);
-        fs::create_dir_all(&base).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::create_dir_all(&base)?;
         let sub = base.join("subdir");
-        fs::create_dir_all(&sub).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::create_dir_all(&sub)?;
         let file1 = base.join("one.sql");
         let file2 = sub.join("two.sql");
         let sql1 = "CREATE TABLE users (id INTEGER PRIMARY KEY);";
         let sql2 = "CREATE TABLE posts (id INTEGER PRIMARY KEY);";
-        fs::write(&file1, sql1).unwrap_or_else(|e| panic!("panicked on {e}"));
-        fs::write(&file2, sql2).unwrap_or_else(|e| panic!("panicked on {e}"));
-        let set = SqlFileSet::new(&base, None).unwrap_or_else(|e| panic!("panicked on {e}"));
-        let parsed_set =
-            ParsedSqlFileSet::parse_all(set).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::write(&file1, sql1)?;
+        fs::write(&file2, sql2)?;
+        let set = SqlFileSet::new(&base, None)?;
+        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
         let existing_files = parsed_set.files();
         assert_eq!(existing_files.len(), 2);
         for parsed in existing_files {
@@ -136,5 +136,6 @@ mod tests {
         }
 
         let _ = fs::remove_dir_all(&base);
+        Ok(())
     }
 }

@@ -362,262 +362,287 @@ impl Comments {
 }
 
 #[cfg(test)]
-#[test]
-fn location_new_and_default() {
-    let mut location = Location::new(2, 5);
-    location.column = 20;
-    location.line = 43;
+mod tests {
+    use crate::comments::{Comment, CommentError, CommentKind, Comments, Location, Span};
 
-    assert_eq!(Location { column: 20, line: 43 }, location);
+    #[test]
+    fn location_new_and_default() {
+        let mut location = Location::new(2, 5);
+        location.column = 20;
+        location.line = 43;
 
-    let location2 = Location::default();
-    assert_eq!(location2, Location { line: 1, column: 1 });
-}
+        assert_eq!(Location { column: 20, line: 43 }, location);
 
-#[test]
-fn span_default_and_updates() {
-    let default = Span::default();
-    assert_eq!(default.start, Location::default());
-    assert_eq!(default.end, Location::default());
+        let location2 = Location::default();
+        assert_eq!(location2, Location { line: 1, column: 1 });
+    }
 
-    let span = Span { end: Location::new(55, 100), ..Default::default() };
+    #[test]
+    fn span_default_and_updates() {
+        let default = Span::default();
+        assert_eq!(default.start, Location::default());
+        assert_eq!(default.end, Location::default());
 
-    assert_eq!(span.start, Location::default());
-    assert_eq!(span.end, Location { line: 55, column: 100 });
-}
+        let span = Span { end: Location::new(55, 100), ..Default::default() };
 
-#[test]
-fn comments_with_comment_kind() {
-    let raw_comment = "-- a comment";
-    let len = raw_comment.len() as u64;
+        assert_eq!(span.start, Location::default());
+        assert_eq!(span.end, Location { line: 55, column: 100 });
+    }
 
-    let singleline = CommentKind::SingleLine(raw_comment.to_string());
-    let mut span = Span::default();
-    span.end.column = len - 1;
+    #[test]
+    fn comments_with_comment_kind() {
+        let raw_comment = "-- a comment";
+        let len = raw_comment.len() as u64;
 
-    let comment = Comment::new(singleline.clone(), span);
+        let singleline = CommentKind::SingleLine(raw_comment.to_string());
+        let mut span = Span::default();
+        span.end.column = len - 1;
 
-    assert_eq!(comment.kind, singleline);
+        let comment = Comment::new(singleline.clone(), span);
 
-    let expected_span =
-        Span::new(Location { line: 1, column: 1 }, Location { line: 1, column: len - 1 });
+        assert_eq!(comment.kind, singleline);
 
-    assert_eq!(comment.span, expected_span);
-}
+        let expected_span =
+            Span::new(Location { line: 1, column: 1 }, Location { line: 1, column: len - 1 });
 
-#[test]
-fn multiline_comment_span() {
-    let kind = CommentKind::MultiLine("/* hello\nworld */".to_string());
-    let span = Span::new(Location { line: 1, column: 1 }, Location { line: 2, column: 9 });
+        assert_eq!(comment.span, expected_span);
+    }
 
-    let comment = Comment::new(kind.clone(), span);
+    #[test]
+    fn multiline_comment_span() {
+        let kind = CommentKind::MultiLine("/* hello\nworld */".to_string());
+        let span = Span::new(Location { line: 1, column: 1 }, Location { line: 2, column: 9 });
 
-    assert_eq!(comment.kind, kind);
-    assert_eq!(comment.span.start.line, 1);
-    assert_eq!(comment.span.end.line, 2);
-}
+        let comment = Comment::new(kind.clone(), span);
 
-#[test]
-fn parse_comments() {
-    use std::path::Path;
+        assert_eq!(comment.kind, kind);
+        assert_eq!(comment.span.start.line, 1);
+        assert_eq!(comment.span.end.line, 2);
+    }
 
-    use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
-    let path = Path::new("sql_files");
-    let set = SqlFileSet::new(path, None).unwrap_or_else(|e| panic!("panicked on {e}"));
-    let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap_or_else(|e| panic!("panicked on {e}"));
-    for file in parsed_set.files() {
-        let parsed_comments = Comments::parse_all_comments_from_file(file)
-            .unwrap_or_else(|e| panic!("panicked on {e}"));
-        let file_path = file.file().path().to_str().map_or_else(|| panic!("panicked"), |val| val);
-        match file_path {
-            "sql_files/with_single_line_comments.sql" => {
-                let expected = [
-                    "Users table stores user account information",
-                    "Primary key",
-                    "Username for login",
-                    "Email address",
-                    "When the user registered",
-                    "Posts table stores blog posts",
-                    "Primary key",
-                    "Post title",
-                    "Foreign key linking to users",
-                    "Main body text",
-                    "When the post was created",
-                ];
-                assert_eq!(expected.len(), parsed_comments.comments().len());
-                parsed_comments
-                    .comments()
-                    .iter()
-                    .enumerate()
-                    .for_each(|(i, c)| assert_eq!(expected[i], c.kind().comment()));
-            }
-            "sql_files/with_multiline_comments.sql" => {
-                let expected = [
-                    "Users table stores user account information \nmultiline",
-                    "Primary key \n    multiline",
-                    "Username for login \n    multiline",
-                    "Email address \n    multiline",
-                    "When the user registered \n    multiline",
-                    "Posts table stores blog posts \nmultiline",
-                    "Primary key \n    multiline",
-                    "Post title \n    multiline",
-                    "Foreign key linking to users \n    multiline",
-                    "Main body text \n    multiline",
-                    "When the post was created \n    multiline",
-                ];
-                assert_eq!(expected.len(), parsed_comments.comments().len());
-                parsed_comments
-                    .comments()
-                    .iter()
-                    .enumerate()
-                    .for_each(|(i, c)| assert_eq!(expected[i], c.kind().comment()));
-            }
-            "sql_files/with_mixed_comments.sql" => {
-                let expected = [
-                    "interstitial Comment above statements (should be ignored)",
-                    "Users table stores user account information",
-                    "users interstitial comment \n(should be ignored)",
-                    "Primary key",
-                    "Id comment that is interstitial (should be ignored)",
-                    "Username for login",
-                    "Email address",
-                    "When the user registered",
-                    "Posts table stores blog posts",
-                    "Primary key",
-                    "Post title",
-                    "Foreign key linking to users",
-                    "Main body text",
-                    "When the post was created",
-                ];
-                assert_eq!(expected.len(), parsed_comments.comments().len());
-                parsed_comments
-                    .comments()
-                    .iter()
-                    .enumerate()
-                    .for_each(|(i, c)| assert_eq!(expected[i], c.kind().comment()));
-            }
-            "sql_files/without_comments.sql" => {
-                assert_eq!(0, parsed_comments.comments.len());
-            }
-            _ => {
-                unreachable!(
-                    "This shouldn't be accessible if directory parsed correctly and all test \
-                     files accounted for"
-                )
+    #[test]
+    fn parse_comments() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::{ast::ParsedSqlFileSet, comments::Comments, files::SqlFileSet};
+        use std::path::Path;
+
+        let path = Path::new("sql_files");
+        let set = SqlFileSet::new(path, None)?;
+        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
+
+        for file in parsed_set.files() {
+            let parsed_comments = Comments::parse_all_comments_from_file(file)?;
+
+            // Windows-safe: only care about the file name, not the separator style
+            let filename = file
+                .file()
+                .path()
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map_or_else(|| panic!("test file name should be valid UTF-8"), |val| val);
+
+            match filename {
+                "with_single_line_comments.sql" => {
+                    assert_parsed_comments_eq(&parsed_comments, expected_single_line_comments());
+                }
+                "with_multiline_comments.sql" => {
+                    assert_parsed_comments_eq(&parsed_comments, expected_multiline_comments());
+                }
+                "with_mixed_comments.sql" => {
+                    assert_parsed_comments_eq(&parsed_comments, expected_mixed_comments());
+                }
+                "without_comments.sql" => {
+                    assert!(parsed_comments.comments().is_empty());
+                }
+                other => {
+                    unreachable!(
+                        "unexpected test file {other}; directory should only contain known test files"
+                    );
+                }
             }
         }
+
+        Ok(())
     }
-}
 
-#[test]
-fn single_line_comment_spans_are_correct() {
-    use std::path::Path;
+    fn assert_parsed_comments_eq(parsed: &Comments, expected: &[&str]) {
+        let comments = parsed.comments();
+        assert_eq!(
+            expected.len(),
+            comments.len(),
+            "mismatched comment count (expected {}, got {})",
+            expected.len(),
+            comments.len()
+        );
 
-    use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
-    let path = Path::new("sql_files");
-    let set = SqlFileSet::new(path, None).unwrap_or_else(|e| panic!("panicked on {e}"));
-    let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap_or_else(|e| panic!("panicked on {e}"));
-    let file = {
-        let Some(f) = parsed_set.files().iter().find(|f| {
-            let Some(path) = f.file().path().to_str() else {
-                return false;
+        for (i, comment) in comments.iter().enumerate() {
+            assert_eq!(expected[i], comment.kind().comment(), "comment at index {i} did not match");
+        }
+    }
+
+    fn expected_single_line_comments() -> &'static [&'static str] {
+        &[
+            "Users table stores user account information",
+            "Primary key",
+            "Username for login",
+            "Email address",
+            "When the user registered",
+            "Posts table stores blog posts",
+            "Primary key",
+            "Post title",
+            "Foreign key linking to users",
+            "Main body text",
+            "When the post was created",
+        ]
+    }
+
+    fn expected_multiline_comments() -> &'static [&'static str] {
+        &[
+            "Users table stores user account information \nmultiline",
+            "Primary key \n    multiline",
+            "Username for login \n    multiline",
+            "Email address \n    multiline",
+            "When the user registered \n    multiline",
+            "Posts table stores blog posts \nmultiline",
+            "Primary key \n    multiline",
+            "Post title \n    multiline",
+            "Foreign key linking to users \n    multiline",
+            "Main body text \n    multiline",
+            "When the post was created \n    multiline",
+        ]
+    }
+
+    fn expected_mixed_comments() -> &'static [&'static str] {
+        &[
+            "interstitial Comment above statements (should be ignored)",
+            "Users table stores user account information",
+            "users interstitial comment \n(should be ignored)",
+            "Primary key",
+            "Id comment that is interstitial (should be ignored)",
+            "Username for login",
+            "Email address",
+            "When the user registered",
+            "Posts table stores blog posts",
+            "Primary key",
+            "Post title",
+            "Foreign key linking to users",
+            "Main body text",
+            "When the post was created",
+        ]
+    }
+
+    #[test]
+    fn single_line_comment_spans_are_correct() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
+        use std::path::Path;
+        let path = Path::new("sql_files");
+        let set = SqlFileSet::new(path, None)?;
+        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
+        let file = {
+            let Some(f) = parsed_set.files().iter().find(|f| {
+                let Some(path) = f.file().path().to_str() else {
+                    return false;
+                };
+                path.ends_with("with_single_line_comments.sql")
+            }) else {
+                panic!("with_single_line_comments.sql should be present");
             };
-            path.ends_with("with_single_line_comments.sql")
-        }) else {
-            panic!("with_single_line_comments.sql should be present");
+            f
         };
-        f
-    };
 
-    let comments =
-        Comments::parse_all_comments_from_file(file).unwrap_or_else(|e| panic!("panicked on {e}"));
-    let comments = comments.comments();
-    assert_eq!(comments.len(), 11);
-    let first = &comments[0];
-    assert_eq!(first.kind().comment(), "Users table stores user account information");
-    assert_eq!(first.span().start(), &Location::new(1, 1));
-    assert_eq!(first.span().end(), &Location::new(1, 47));
-    let primary_key = &comments[1];
-    assert_eq!(primary_key.kind().comment(), "Primary key");
-    assert_eq!(primary_key.span().start(), &Location::new(3, 4));
-    assert_eq!(primary_key.span().end(), &Location::new(3, 18));
-    assert!(
-        primary_key.span().end().column() > primary_key.span().start().column(),
-        "end column should be after start column",
-    );
-}
+        let comments = Comments::parse_all_comments_from_file(file)?;
+        let comments = comments.comments();
+        assert_eq!(comments.len(), 11);
+        let first = &comments[0];
+        assert_eq!(first.kind().comment(), "Users table stores user account information");
+        assert_eq!(first.span().start(), &Location::new(1, 1));
+        assert_eq!(first.span().end(), &Location::new(1, 47));
+        let primary_key = &comments[1];
+        assert_eq!(primary_key.kind().comment(), "Primary key");
+        assert_eq!(primary_key.span().start(), &Location::new(3, 4));
+        assert_eq!(primary_key.span().end(), &Location::new(3, 18));
+        assert!(
+            primary_key.span().end().column() > primary_key.span().start().column(),
+            "end column should be after start column",
+        );
+        Ok(())
+    }
 
-#[test]
-fn multiline_comment_spans_are_correct() {
-    use std::path::Path;
+    #[test]
+    fn multiline_comment_spans_are_correct() -> Result<(), Box<dyn std::error::Error>> {
+        use std::path::Path;
 
-    use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
-    let path = Path::new("sql_files");
-    let set = SqlFileSet::new(path, None).unwrap_or_else(|e| panic!("panicked on {e}"));
-    let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap_or_else(|e| panic!("panicked on {e}"));
-    let file = {
-        let Some(f) = parsed_set.files().iter().find(|f| {
-            let Some(path) = f.file().path().to_str() else {
-                return false;
+        use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
+        let path = Path::new("sql_files");
+        let set = SqlFileSet::new(path, None)?;
+        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
+        let file = {
+            let Some(f) = parsed_set.files().iter().find(|f| {
+                let Some(path) = f.file().path().to_str() else {
+                    return false;
+                };
+                path.ends_with("with_multiline_comments.sql")
+            }) else {
+                panic!("with_multiline_comments.sql should be present");
             };
-            path.ends_with("with_multiline_comments.sql")
-        }) else {
-            panic!("with_multiline_comments.sql should be present");
+            f
         };
-        f
-    };
-    let comments =
-        Comments::parse_all_comments_from_file(file).unwrap_or_else(|e| panic!("panicked on {e}"));
-    let comments = comments.comments();
-    assert_eq!(comments.len(), 11);
-    let first = &comments[0];
-    assert_eq!(first.kind().comment(), "Users table stores user account information \nmultiline");
-    assert_eq!(first.span().start(), &Location::new(1, 1));
-    assert_eq!(first.span().end().line(), 2);
-    assert!(
-        first.span().end().column() > first.span().start().column(),
-        "end column should be after start column for first multiline comment",
-    );
-    let primary_key = &comments[1];
-    assert_eq!(primary_key.kind().comment(), "Primary key \n    multiline");
-    assert_eq!(primary_key.span().start(), &Location::new(4, 4));
-    assert_eq!(primary_key.span().end().line(), 5);
-    assert!(
-        primary_key.span().end().column() > primary_key.span().start().column(),
-        "end column should be after start column for primary key multiline comment",
-    );
-}
+        let comments = Comments::parse_all_comments_from_file(file)?;
+        let comments = comments.comments();
+        assert_eq!(comments.len(), 11);
+        let first = &comments[0];
+        assert_eq!(
+            first.kind().comment(),
+            "Users table stores user account information \nmultiline"
+        );
+        assert_eq!(first.span().start(), &Location::new(1, 1));
+        assert_eq!(first.span().end().line(), 2);
+        assert!(
+            first.span().end().column() > first.span().start().column(),
+            "end column should be after start column for first multiline comment",
+        );
+        let primary_key = &comments[1];
+        assert_eq!(primary_key.kind().comment(), "Primary key \n    multiline");
+        assert_eq!(primary_key.span().start(), &Location::new(4, 4));
+        assert_eq!(primary_key.span().end().line(), 5);
+        assert!(
+            primary_key.span().end().column() > primary_key.span().start().column(),
+            "end column should be after start column for primary key multiline comment",
+        );
+        Ok(())
+    }
 
-#[test]
-fn test_comment_error() {
-    let unterminated = CommentError::UnterminatedMultiLineComment { start: Location::default() };
-    let location = Location { line: 1, column: 1 };
-    let expected = format!(
-        "unterminated block comment with start at line {}, column {}",
-        location.line(),
-        location.column()
-    );
-    assert_eq!(unterminated.to_string(), expected);
-}
+    #[test]
+    fn test_comment_error() {
+        let unterminated =
+            CommentError::UnterminatedMultiLineComment { start: Location::default() };
+        let location = Location { line: 1, column: 1 };
+        let expected = format!(
+            "unterminated block comment with start at line {}, column {}",
+            location.line(),
+            location.column()
+        );
+        assert_eq!(unterminated.to_string(), expected);
+    }
 
-#[test]
-fn test_comments() {
-    let comment_vec = vec![
-        Comment::new(
-            CommentKind::SingleLine("a comment".to_string()),
-            Span { start: Location::new(1, 1), end: Location::new(1, 12) },
-        ),
-        Comment::new(
-            CommentKind::SingleLine("a second comment".to_string()),
-            Span { start: Location::new(1, 1), end: Location::new(2, 19) },
-        ),
-    ];
-    let length = comment_vec.len();
-    let comments = Comments::new(comment_vec.clone());
-    assert!(comments.comments().len() == length);
-    for (i, comment) in comments.comments().iter().enumerate() {
-        assert_eq!(comment.kind().comment(), comment_vec[i].kind().comment());
-        assert_eq!(comment.span().start(), comment_vec[i].span().start());
-        assert_eq!(comment.span().end(), comment_vec[i].span().end());
+    #[test]
+    fn test_comments() {
+        let comment_vec = vec![
+            Comment::new(
+                CommentKind::SingleLine("a comment".to_string()),
+                Span { start: Location::new(1, 1), end: Location::new(1, 12) },
+            ),
+            Comment::new(
+                CommentKind::SingleLine("a second comment".to_string()),
+                Span { start: Location::new(1, 1), end: Location::new(2, 19) },
+            ),
+        ];
+        let length = comment_vec.len();
+        let comments = Comments::new(comment_vec.clone());
+        assert!(comments.comments().len() == length);
+        for (i, comment) in comments.comments().iter().enumerate() {
+            assert_eq!(comment.kind().comment(), comment_vec[i].kind().comment());
+            assert_eq!(comment.span().start(), comment_vec[i].span().start());
+            assert_eq!(comment.span().end(), comment_vec[i].span().end());
+        }
     }
 }
