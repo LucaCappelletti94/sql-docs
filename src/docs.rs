@@ -6,7 +6,7 @@ use crate::{ast::ParsedSqlFile, comments::Comments};
 
 /// Structure for containing the `name` of the `Column` and an [`Option`] for
 /// the comment as a [`String`]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ColumnDoc {
     name: String,
     doc: Option<String>,
@@ -39,7 +39,7 @@ impl ColumnDoc {
 
 /// Structure for containing the `name` of the `Table`, an [`Option`] for the
 /// comment as a [`String`], and a `Vec` of [`ColumnDoc`] contained in the table
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TableDoc {
     name: String,
     doc: Option<String>,
@@ -83,7 +83,7 @@ impl TableDoc {
 
 /// Structure for containing the docs for every `Table` in an `.sql` file as a
 /// `Vec` of [`TableDoc`]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SqlDocs {
     tables: Vec<TableDoc>,
 }
@@ -130,13 +130,11 @@ impl SqlDocs {
                     }
                     let table_leading = comments.leading_comment(table_start);
                     let table_doc = match table_leading {
-                        Some(comment) => {
-                            TableDoc::new(
-                                table.name.to_string(),
-                                Some(comment.text().to_string()),
-                                column_docs,
-                            )
-                        }
+                        Some(comment) => TableDoc::new(
+                            table.name.to_string(),
+                            Some(comment.text().to_string()),
+                            column_docs,
+                        ),
                         None => TableDoc::new(table.name.to_string(), None, column_docs),
                     };
                     tables.push(table_doc);
@@ -168,175 +166,40 @@ mod tests {
             TableDoc::new("user".to_string(), Some("The table for users".to_string()), columns);
         let tables = vec![table_doc];
         let sql_doc = SqlDocs::new(tables);
-        assert_eq!(sql_doc.tables().first().unwrap().name(), "user");
-        assert_eq!(sql_doc.tables().first().unwrap().columns().first().unwrap().name(), "id");
+        let sql_doc_val =
+            sql_doc.tables().first().map_or_else(|| panic!("unable to find tables"), |val| val);
+        assert_eq!(sql_doc_val.name(), "user");
+        let sql_doc_val_column = sql_doc_val
+            .columns()
+            .first()
+            .map_or_else(|| panic!("unable to find columns"), |val| val);
+        assert_eq!(sql_doc_val_column.name(), "id");
     }
 
     #[test]
     fn generate_docs_files() {
-        use std::path::Path;
-
         use crate::{ast::ParsedSqlFileSet, comments::Comments, files::SqlFileSet};
-
+        use std::path::Path;
         let path = Path::new("sql_files");
-        let set = SqlFileSet::new(path, None).unwrap();
-        let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap();
-
+        let set = SqlFileSet::new(path, None).unwrap_or_else(|e| panic!("panicked on {e}"));
+        let parsed_set =
+            ParsedSqlFileSet::parse_all(set).unwrap_or_else(|e| panic!("panicked on {e}"));
         for file in parsed_set.files() {
-            let comments = Comments::parse_all_comments_from_file(file).unwrap();
+            let comments = Comments::parse_all_comments_from_file(file)
+                .unwrap_or_else(|e| panic!("panicked on {e}"));
             let docs = SqlDocs::from_parsed_file(file, &comments);
-
-            match file.file().path().to_str().unwrap() {
-                "sql_files/with_single_line_comments.sql" => {
-                    let expected = SqlDocs::new(vec![
-                        TableDoc::new(
-                            "users".to_string(),
-                            Some("Users table stores user account information".to_string()),
-                            vec![
-                                ColumnDoc::new("id".to_string(), Some("Primary key".to_string())),
-                                ColumnDoc::new(
-                                    "username".to_string(),
-                                    Some("Username for login".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "email".to_string(),
-                                    Some("Email address".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "created_at".to_string(),
-                                    Some("When the user registered".to_string()),
-                                ),
-                            ],
-                        ),
-                        TableDoc::new(
-                            "posts".to_string(),
-                            Some("Posts table stores blog posts".to_string()),
-                            vec![
-                                ColumnDoc::new("id".to_string(), Some("Primary key".to_string())),
-                                ColumnDoc::new("title".to_string(), Some("Post title".to_string())),
-                                ColumnDoc::new(
-                                    "user_id".to_string(),
-                                    Some("Foreign key linking to users".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "body".to_string(),
-                                    Some("Main body text".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "published_at".to_string(),
-                                    Some("When the post was created".to_string()),
-                                ),
-                            ],
-                        ),
-                    ]);
-
-                    assert_eq!(docs, expected);
+            let file_found = file
+                .file()
+                .path()
+                .to_str()
+                .map_or_else(|| panic!("unable to stringify path"), |val| val);
+            let expected_values = expect_values();
+            match file_found {
+                "sql_files/with_single_line_comments.sql" | "sql_files/with_mixed_comments.sql" => {
+                    assert_eq!(&docs, &expected_values[0]);
                 }
                 "sql_files/with_multiline_comments.sql" => {
-                    let expected = SqlDocs::new(vec![
-                        TableDoc::new(
-                            "users".to_string(),
-                            Some(
-                                "Users table stores user account information \nmultiline"
-                                    .to_string(),
-                            ),
-                            vec![
-                                ColumnDoc::new(
-                                    "id".to_string(),
-                                    Some("Primary key \n    multiline".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "username".to_string(),
-                                    Some("Username for login \n    multiline".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "email".to_string(),
-                                    Some("Email address \n    multiline".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "created_at".to_string(),
-                                    Some("When the user registered \n    multiline".to_string()),
-                                ),
-                            ],
-                        ),
-                        TableDoc::new(
-                            "posts".to_string(),
-                            Some("Posts table stores blog posts \nmultiline".to_string()),
-                            vec![
-                                ColumnDoc::new(
-                                    "id".to_string(),
-                                    Some("Primary key \n    multiline".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "title".to_string(),
-                                    Some("Post title \n    multiline".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "user_id".to_string(),
-                                    Some(
-                                        "Foreign key linking to users \n    multiline".to_string(),
-                                    ),
-                                ),
-                                ColumnDoc::new(
-                                    "body".to_string(),
-                                    Some("Main body text \n    multiline".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "published_at".to_string(),
-                                    Some("When the post was created \n    multiline".to_string()),
-                                ),
-                            ],
-                        ),
-                    ]);
-
-                    assert_eq!(docs, expected);
-                }
-                "sql_files/with_mixed_comments.sql" => {
-                    // Mixed should still produce the same final docs as the pure single-line
-                    // version.
-                    let expected = SqlDocs::new(vec![
-                        TableDoc::new(
-                            "users".to_string(),
-                            Some("Users table stores user account information".to_string()),
-                            vec![
-                                ColumnDoc::new("id".to_string(), Some("Primary key".to_string())),
-                                ColumnDoc::new(
-                                    "username".to_string(),
-                                    Some("Username for login".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "email".to_string(),
-                                    Some("Email address".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "created_at".to_string(),
-                                    Some("When the user registered".to_string()),
-                                ),
-                            ],
-                        ),
-                        TableDoc::new(
-                            "posts".to_string(),
-                            Some("Posts table stores blog posts".to_string()),
-                            vec![
-                                ColumnDoc::new("id".to_string(), Some("Primary key".to_string())),
-                                ColumnDoc::new("title".to_string(), Some("Post title".to_string())),
-                                ColumnDoc::new(
-                                    "user_id".to_string(),
-                                    Some("Foreign key linking to users".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "body".to_string(),
-                                    Some("Main body text".to_string()),
-                                ),
-                                ColumnDoc::new(
-                                    "published_at".to_string(),
-                                    Some("When the post was created".to_string()),
-                                ),
-                            ],
-                        ),
-                    ]);
-
-                    assert_eq!(docs, expected);
+                    assert_eq!(&docs, &expected_values[1]);
                 }
                 "sql_files/without_comments.sql" => {
                     let expected = SqlDocs::new(vec![
@@ -362,8 +225,7 @@ mod tests {
                             ],
                         ),
                     ]);
-
-                    assert_eq!(docs, expected);
+                    assert_eq!(&docs, &expected);
                 }
                 _ => {
                     unreachable!(
@@ -373,5 +235,93 @@ mod tests {
                 }
             }
         }
+    }
+    fn expect_values() -> Vec<SqlDocs> {
+        let mut docs = Vec::new();
+        let first_docs = SqlDocs::new(vec![
+            TableDoc::new(
+                "users".to_string(),
+                Some("Users table stores user account information".to_string()),
+                vec![
+                    ColumnDoc::new("id".to_string(), Some("Primary key".to_string())),
+                    ColumnDoc::new("username".to_string(), Some("Username for login".to_string())),
+                    ColumnDoc::new("email".to_string(), Some("Email address".to_string())),
+                    ColumnDoc::new(
+                        "created_at".to_string(),
+                        Some("When the user registered".to_string()),
+                    ),
+                ],
+            ),
+            TableDoc::new(
+                "posts".to_string(),
+                Some("Posts table stores blog posts".to_string()),
+                vec![
+                    ColumnDoc::new("id".to_string(), Some("Primary key".to_string())),
+                    ColumnDoc::new("title".to_string(), Some("Post title".to_string())),
+                    ColumnDoc::new(
+                        "user_id".to_string(),
+                        Some("Foreign key linking to users".to_string()),
+                    ),
+                    ColumnDoc::new("body".to_string(), Some("Main body text".to_string())),
+                    ColumnDoc::new(
+                        "published_at".to_string(),
+                        Some("When the post was created".to_string()),
+                    ),
+                ],
+            ),
+        ]);
+        docs.push(first_docs);
+        let second_docs = SqlDocs::new(vec![
+            TableDoc::new(
+                "users".to_string(),
+                Some("Users table stores user account information \nmultiline".to_string()),
+                vec![
+                    ColumnDoc::new(
+                        "id".to_string(),
+                        Some("Primary key \n    multiline".to_string()),
+                    ),
+                    ColumnDoc::new(
+                        "username".to_string(),
+                        Some("Username for login \n    multiline".to_string()),
+                    ),
+                    ColumnDoc::new(
+                        "email".to_string(),
+                        Some("Email address \n    multiline".to_string()),
+                    ),
+                    ColumnDoc::new(
+                        "created_at".to_string(),
+                        Some("When the user registered \n    multiline".to_string()),
+                    ),
+                ],
+            ),
+            TableDoc::new(
+                "posts".to_string(),
+                Some("Posts table stores blog posts \nmultiline".to_string()),
+                vec![
+                    ColumnDoc::new(
+                        "id".to_string(),
+                        Some("Primary key \n    multiline".to_string()),
+                    ),
+                    ColumnDoc::new(
+                        "title".to_string(),
+                        Some("Post title \n    multiline".to_string()),
+                    ),
+                    ColumnDoc::new(
+                        "user_id".to_string(),
+                        Some("Foreign key linking to users \n    multiline".to_string()),
+                    ),
+                    ColumnDoc::new(
+                        "body".to_string(),
+                        Some("Main body text \n    multiline".to_string()),
+                    ),
+                    ColumnDoc::new(
+                        "published_at".to_string(),
+                        Some("When the post was created \n    multiline".to_string()),
+                    ),
+                ],
+            ),
+        ]);
+        docs.push(second_docs);
+        docs
     }
 }

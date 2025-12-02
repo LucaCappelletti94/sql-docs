@@ -148,30 +148,39 @@ fn test_with_deny_list_from_files() {
             "sql_files/with_multiline_comments.sql",
         ],
     )
-    .unwrap();
-    assert_eq!(
-        generated_docs.iter().next().unwrap().0,
-        PathBuf::from("sql_files/with_mixed_comments.sql")
-    );
+    .unwrap_or_else(|_| panic!("unable to generate docs"));
+    let firs_gen_doc = generated_docs
+        .first()
+        .map_or_else(|| panic!("unable to find first value"), |val| val.0.clone());
+    assert_eq!(firs_gen_doc, PathBuf::from("sql_files/with_mixed_comments.sql"));
     let table_names = ["users", "posts"];
     let table_comments =
         ["Users table stores user account information", "Posts table stores blog posts"];
     for (i, (_, sqldoc)) in generated_docs.iter().enumerate() {
         assert_eq!(sqldoc.tables()[i].name(), table_names[i]);
-        assert_eq!(sqldoc.tables()[i].doc().as_ref().unwrap(), table_comments[i]);
+        let sqldoc_tables = sqldoc.tables()[i]
+            .doc()
+            .as_ref()
+            .map_or_else(|| panic!("unable to find sqldoc columns"), |val| val);
+        assert_eq!(sqldoc_tables, table_comments[i]);
     }
     let user_columns = ["id", "username", "email", "created_at"];
     let user_columns_comments =
         ["Primary key", "Username for login", "Email address", "When the user registered"];
     for (i, column) in generated_docs[0].1.tables()[0].columns().iter().enumerate() {
         assert_eq!(column.name(), user_columns[i]);
-        assert_eq!(column.doc().as_ref().unwrap(), user_columns_comments[i]);
+        let column_doc = column
+            .doc()
+            .as_ref()
+            .map_or_else(|| panic!("unable to find column doc value"), |val| val);
+        assert_eq!(column_doc, user_columns_comments[i]);
     }
 }
 
 #[test]
 fn test_with_no_deny_list_from_files() {
-    let generated_docs = generate_docs_from_dir_no_deny("sql_files").unwrap();
+    let generated_docs = generate_docs_from_dir_no_deny("sql_files")
+        .unwrap_or_else(|_| panic!("unable to locate test dir"));
     let expected_paths = [
         "sql_files/without_comments.sql",
         "sql_files/with_multiline_comments.sql",
@@ -191,15 +200,15 @@ fn test_with_no_deny_list_from_files() {
                 assert_eq!(table.name(), table_names[i]);
                 match table.doc().as_ref() {
                     Some(val) => assert_eq!(val, table_comments[i]),
-                    None => panic!("There should be a value for the table doc")
+                    None => panic!("There should be a value for the table doc"),
                 }
                 if table.name() == "users" {
                     for (i, column) in table.columns().iter().enumerate() {
                         assert_eq!(column.name(), user_columns[i]);
                         match column.doc().as_ref() {
                             Some(val) => assert_eq!(val, user_columns_comments[i]),
-                            None => panic!("there should be a value for the doc column")
-                        }                        
+                            None => panic!("there should be a value for the doc column"),
+                        }
                     }
                 }
             }
@@ -211,7 +220,9 @@ fn test_doc_errors() {
     use std::fs;
 
     use crate::comments::Location;
-    let Err(io_error) = fs::read_dir("INVALID") else { panic!("there should not be a directory called INVALID") };
+    let Err(io_error) = fs::read_dir("INVALID") else {
+        panic!("there should not be a directory called INVALID")
+    };
     let io_error_str = io_error.to_string();
     let read_error = DocError::FileReadError(io_error);
     let expected_read_error = "file read error: ".to_owned() + &io_error_str;
@@ -234,7 +245,9 @@ fn test_doc_errors_from() {
     use std::fs;
 
     use crate::comments::Location;
-    let Err(io_error) = fs::read_dir("INVALID") else { panic!("there should not be a directory called INVALID") };
+    let Err(io_error) = fs::read_dir("INVALID") else {
+        panic!("there should not be a directory called INVALID")
+    };
     let io_kind = io_error.kind();
     let doc_io_error = DocError::from(io_error);
     match doc_io_error {
@@ -266,21 +279,29 @@ fn test_doc_error_source() {
 
     use crate::comments::Location;
 
-    let Err(io_err) = fs::read_dir("INVALID") else { panic!("there should not be a directory called INVALID") };
+    let Err(io_err) = fs::read_dir("INVALID") else {
+        panic!("there should not be a directory called INVALID")
+    };
     let io_err_str = io_err.to_string();
     let doc_io = DocError::FileReadError(io_err);
-    let src = doc_io.source().map_or_else(|| panic!("expected Some(source) for FileReadError"), |source| source);
+    let src = doc_io
+        .source()
+        .map_or_else(|| panic!("expected Some(source) for FileReadError"), |source| source);
     assert_eq!(src.to_string(), io_err_str);
 
     let comment = CommentError::UnmatchedMultilineCommentStart { location: Location::default() };
     let comment_str = comment.to_string();
     let doc_comment = DocError::CommentError(comment);
-    let src = doc_comment.source().map_or_else(|| panic!("expected Some(source) for CommentError"), |source| source);
+    let src = doc_comment
+        .source()
+        .map_or_else(|| panic!("expected Some(source) for CommentError"), |source| source);
     assert_eq!(src.to_string(), comment_str);
 
     let parser = ParserError::RecursionLimitExceeded;
     let parser_str = parser.to_string();
     let doc_parser = DocError::SqlParserError(parser);
-    let src = doc_parser.source().map_or_else(|| panic!("expected Some(source) for SqlParserError"), |source| source);
+    let src = doc_parser
+        .source()
+        .map_or_else(|| panic!("expected Some(source) for SqlParserError"), |source| source);
     assert_eq!(src.to_string(), parser_str);
 }

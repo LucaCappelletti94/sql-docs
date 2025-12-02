@@ -380,8 +380,7 @@ fn span_default_and_updates() {
     assert_eq!(default.start, Location::default());
     assert_eq!(default.end, Location::default());
 
-    let mut span = Span::default();
-    span.end = Location::new(55, 100);
+    let span = Span { end: Location::new(55, 100), ..Default::default() };
 
     assert_eq!(span.start, Location::default());
     assert_eq!(span.end, Location { line: 55, column: 100 });
@@ -424,11 +423,13 @@ fn parse_comments() {
 
     use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
     let path = Path::new("sql_files");
-    let set = SqlFileSet::new(path, None).unwrap();
-    let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap();
-    for file in parsed_set.files().iter() {
-        let parsed_comments = Comments::parse_all_comments_from_file(file).unwrap();
-        match file.file().path().to_str().unwrap() {
+    let set = SqlFileSet::new(path, None).unwrap_or_else(|e| panic!("panicked on {e}"));
+    let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap_or_else(|e| panic!("panicked on {e}"));
+    for file in parsed_set.files() {
+        let parsed_comments = Comments::parse_all_comments_from_file(file)
+            .unwrap_or_else(|e| panic!("panicked on {e}"));
+        let file_path = file.file().path().to_str().map_or_else(|| panic!("panicked"), |val| val);
+        match file_path {
             "sql_files/with_single_line_comments.sql" => {
                 let expected = [
                     "Users table stores user account information",
@@ -514,14 +515,22 @@ fn single_line_comment_spans_are_correct() {
 
     use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
     let path = Path::new("sql_files");
-    let set = SqlFileSet::new(path, None).unwrap();
-    let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap();
-    let file = parsed_set
-        .files()
-        .iter()
-        .find(|f| f.file().path().to_str().unwrap().ends_with("with_single_line_comments.sql"))
-        .expect("with_single_line_comments.sql should be present");
-    let comments = Comments::parse_all_comments_from_file(file).unwrap();
+    let set = SqlFileSet::new(path, None).unwrap_or_else(|e| panic!("panicked on {e}"));
+    let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap_or_else(|e| panic!("panicked on {e}"));
+    let file = {
+        let Some(f) = parsed_set.files().iter().find(|f| {
+            let Some(path) = f.file().path().to_str() else {
+                return false;
+            };
+            path.ends_with("with_single_line_comments.sql")
+        }) else {
+            panic!("with_single_line_comments.sql should be present");
+        };
+        f
+    };
+
+    let comments =
+        Comments::parse_all_comments_from_file(file).unwrap_or_else(|e| panic!("panicked on {e}"));
     let comments = comments.comments();
     assert_eq!(comments.len(), 11);
     let first = &comments[0];
@@ -544,14 +553,21 @@ fn multiline_comment_spans_are_correct() {
 
     use crate::{ast::ParsedSqlFileSet, files::SqlFileSet};
     let path = Path::new("sql_files");
-    let set = SqlFileSet::new(path, None).unwrap();
-    let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap();
-    let file = parsed_set
-        .files()
-        .iter()
-        .find(|f| f.file().path().to_str().unwrap().ends_with("with_multiline_comments.sql"))
-        .expect("with_multiline_comments.sql should be present");
-    let comments = Comments::parse_all_comments_from_file(file).unwrap();
+    let set = SqlFileSet::new(path, None).unwrap_or_else(|e| panic!("panicked on {e}"));
+    let parsed_set = ParsedSqlFileSet::parse_all(set).unwrap_or_else(|e| panic!("panicked on {e}"));
+    let file = {
+        let Some(f) = parsed_set.files().iter().find(|f| {
+            let Some(path) = f.file().path().to_str() else {
+                return false;
+            };
+            path.ends_with("with_multiline_comments.sql")
+        }) else {
+            panic!("with_multiline_comments.sql should be present");
+        };
+        f
+    };
+    let comments =
+        Comments::parse_all_comments_from_file(file).unwrap_or_else(|e| panic!("panicked on {e}"));
     let comments = comments.comments();
     assert_eq!(comments.len(), 11);
     let first = &comments[0];

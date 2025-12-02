@@ -189,18 +189,19 @@ mod tests {
     fn test_recursive_scan_finds_only_sql_files_recursively() {
         let base = env::temp_dir().join("recursive_scan_test");
         let _ = fs::remove_dir_all(&base);
-        fs::create_dir_all(&base).unwrap();
+        fs::create_dir_all(&base).unwrap_or_else(|e| panic!("panicked on {e}"));
         let sub = base.join("subdir");
-        fs::create_dir_all(&sub).unwrap();
+        fs::create_dir_all(&sub).unwrap_or_else(|e| panic!("panicked on {e}"));
         let file1 = base.join("one.sql");
         let file2 = sub.join("two.sql");
         let non_sql1 = base.join("ignore.txt");
         let non_sql2 = sub.join("README.md");
-        fs::File::create(&file1).unwrap();
-        fs::File::create(&file2).unwrap();
-        fs::File::create(&non_sql1).unwrap();
-        fs::File::create(&non_sql2).unwrap();
-        let mut found = recursive_dir_scan(base.as_path()).unwrap();
+        fs::File::create(&file1).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&file2).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&non_sql1).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&non_sql2).unwrap_or_else(|e| panic!("panicked on {e}"));
+        let mut found =
+            recursive_dir_scan(base.as_path()).unwrap_or_else(|e| panic!("panicked on {e}"));
         found.sort();
         let mut expected = vec![file1, file2];
         expected.sort();
@@ -212,18 +213,19 @@ mod tests {
     fn test_sql_file_list() {
         let base = env::temp_dir().join("recursive_scan_test2");
         let _ = fs::remove_dir_all(&base);
-        fs::create_dir_all(&base).unwrap();
+        fs::create_dir_all(&base).unwrap_or_else(|e| panic!("panicked on {e}"));
         let sub = base.join("subdir");
-        fs::create_dir_all(&sub).unwrap();
+        fs::create_dir_all(&sub).unwrap_or_else(|e| panic!("panicked on {e}"));
         let file1 = base.join("one.sql");
         let file2 = sub.join("two.sql");
         let non_sql1 = base.join("ignore.txt");
         let non_sql2 = sub.join("README.md");
-        fs::File::create(&file1).unwrap();
-        fs::File::create(&file2).unwrap();
-        fs::File::create(&non_sql1).unwrap();
-        fs::File::create(&non_sql2).unwrap();
-        let sql_file_list = SqlFilesList::new(&base, None).unwrap();
+        fs::File::create(&file1).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&file2).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&non_sql1).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&non_sql2).unwrap_or_else(|e| panic!("panicked on {e}"));
+        let sql_file_list =
+            SqlFilesList::new(&base, None).unwrap_or_else(|e| panic!("panicked on {e}"));
         let mut expected = vec![&file1, &file2];
         expected.sort();
         assert_eq!(sql_file_list.sql_files_sorted(), expected);
@@ -233,24 +235,25 @@ mod tests {
     fn test_sql_file_read() {
         let base = env::temp_dir().join("recursive_scan_test3");
         let _ = fs::remove_dir_all(&base);
-        fs::create_dir_all(&base).unwrap();
+        fs::create_dir_all(&base).unwrap_or_else(|e| panic!("panicked on {e}"));
         let sub = base.join("subdir");
-        fs::create_dir_all(&sub).unwrap();
+        fs::create_dir_all(&sub).unwrap_or_else(|e| panic!("panicked on {e}"));
         let file1 = base.join("one.sql");
         let file2 = sub.join("two.sql");
         let non_sql1 = base.join("ignore.txt");
         let non_sql2 = sub.join("README.md");
-        fs::File::create(&file1).unwrap();
-        fs::File::create(&file2).unwrap();
-        fs::File::create(&non_sql1).unwrap();
-        fs::File::create(&non_sql2).unwrap();
+        fs::File::create(&file1).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&file2).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&non_sql1).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&non_sql2).unwrap_or_else(|e| panic!("panicked on {e}"));
         let sql_statement = "CREATE TABLE users( id INTEGER PRIMARY KEY);";
-        fs::write(&file1, sql_statement).unwrap();
-        fs::write(&file2, sql_statement).unwrap();
+        fs::write(&file1, sql_statement).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::write(&file2, sql_statement).unwrap_or_else(|e| panic!("panicked on {e}"));
         let mut expected = vec![&file1, &file2];
         expected.sort();
         let mut found: Vec<&PathBuf> = Vec::new();
-        let sql_file_set = SqlFileSet::new(&base, None).unwrap();
+        let sql_file_set =
+            SqlFileSet::new(&base, None).unwrap_or_else(|e| panic!("panicked on {e}"));
         for file in sql_file_set.iter() {
             assert_eq!(file.content, sql_statement);
             found.push(&file.path);
@@ -263,19 +266,20 @@ mod tests {
     fn test_deny_list_filters_full_paths() {
         let base = env::temp_dir().join("deny_list_full_path_test");
         let _ = fs::remove_dir_all(&base);
-        fs::create_dir_all(&base).unwrap();
+        fs::create_dir_all(&base).unwrap_or_else(|e| panic!("panicked on {e}"));
         let sub = base.join("subdir");
-        fs::create_dir_all(&sub).unwrap();
+        fs::create_dir_all(&sub).unwrap_or_else(|e| panic!("panicked on {e}"));
         let file1 = base.join("one.sql");
         let file2 = sub.join("two.sql");
         let non_sql1 = base.join("ignore.txt");
         let non_sql2 = sub.join("README.md");
-        fs::File::create(&file1).unwrap();
-        fs::File::create(&file2).unwrap();
-        fs::File::create(&non_sql1).unwrap();
-        fs::File::create(&non_sql2).unwrap();
+        fs::File::create(&file1).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&file2).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&non_sql1).unwrap_or_else(|e| panic!("panicked on {e}"));
+        fs::File::create(&non_sql2).unwrap_or_else(|e| panic!("panicked on {e}"));
         let deny_list = Some(vec![file1.to_string_lossy().to_string()]);
-        let sql_file_list = SqlFilesList::new(&base, deny_list).unwrap();
+        let sql_file_list =
+            SqlFilesList::new(&base, deny_list).unwrap_or_else(|e| panic!("panicked on {e}"));
         let found = sql_file_list.sql_files_sorted();
         let mut expected = vec![&file2];
         expected.sort();
@@ -291,9 +295,9 @@ mod tests {
 
         let base = env::temp_dir().join("test_files_fails_dir");
         let _ = fs::remove_dir_all(&base);
-        fs::create_dir_all(&base).unwrap();
+        fs::create_dir_all(&base).unwrap_or_else(|e| panic!("panicked on {e}"));
         let bad_file = base.join("one.sql");
-        fs::File::create(&bad_file).unwrap();
+        fs::File::create(&bad_file).unwrap_or_else(|e| panic!("panicked on {e}"));
         let failed_read = SqlFilesList::new(&bad_file, None);
         assert!(failed_read.is_err());
         let missed_file = base.join("missing.sql");
@@ -302,6 +306,6 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
 
         let bad_file_list = SqlFileSet::new(Path::new(invalid_dir), None);
-        assert!(bad_file_list.is_err())
+        assert!(bad_file_list.is_err());
     }
 }
