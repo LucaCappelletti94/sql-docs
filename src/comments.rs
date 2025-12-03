@@ -245,7 +245,7 @@ impl Comments {
         let mut start_col = 1u64;
 
         let mut line_num = 1u64;
-        let mut col = 1u64;
+        let mut col;
 
         let mut in_single = false;
         let mut in_multi = false;
@@ -289,8 +289,16 @@ impl Comments {
                         if chars.peek().copied() == Some('/') {
                             chars.next();
                             let end_loc = Location::new(line_num, col + 1);
+                            let normalized_comment = buf
+                                .lines()
+                                .enumerate()
+                                .map(|(i, line)| match i {
+                                    0 => line.trim().to_string(),
+                                    _ => "\n".to_string() + line.trim(),
+                                })
+                                .collect();
                             comments.push(Comment::new(
-                                CommentKind::MultiLine(buf.trim().to_string()),
+                                CommentKind::MultiLine(normalized_comment),
                                 Span::new(
                                     Location { line: start_line, column: start_col },
                                     end_loc,
@@ -321,6 +329,8 @@ impl Comments {
                     Span::new(Location { line: start_line, column: start_col }, end_loc),
                 ));
                 buf.clear();
+            } else if in_multi {
+                buf.push('\n');
             }
             line_num += 1;
         }
@@ -329,14 +339,6 @@ impl Comments {
             return Err(CommentError::UnterminatedMultiLineComment {
                 start: Location { line: start_line, column: start_col },
             });
-        }
-
-        if in_single && !buf.is_empty() {
-            let end_loc = Location::new(line_num, col);
-            comments.push(Comment::new(
-                CommentKind::SingleLine(buf.trim_end().to_string()),
-                Span::new(Location { line: start_line, column: start_col }, end_loc),
-            ));
         }
 
         Ok(Self { comments })
@@ -494,17 +496,17 @@ mod tests {
 
     fn expected_multiline_comments() -> &'static [&'static str] {
         &[
-            "Users table stores user account information multiline",
-            "Primary key     multiline",
-            "Username for login     multiline",
-            "Email address     multiline",
-            "When the user registered     multiline",
-            "Posts table stores blog posts multiline",
-            "Primary key     multiline",
-            "Post title     multiline",
-            "Foreign key linking to users     multiline",
-            "Main body text     multiline",
-            "When the post was created     multiline",
+            "Users table stores user account information\nmultiline",
+            "Primary key\nmultiline",
+            "Username for login\nmultiline",
+            "Email address\nmultiline",
+            "When the user registered\nmultiline",
+            "Posts table stores blog posts\nmultiline",
+            "Primary key\nmultiline",
+            "Post title\nmultiline",
+            "Foreign key linking to users\nmultiline",
+            "Main body text\nmultiline",
+            "When the post was created\nmultiline",
         ]
     }
 
@@ -512,7 +514,7 @@ mod tests {
         &[
             "interstitial Comment above statements (should be ignored)",
             "Users table stores user account information",
-            "users interstitial comment (should be ignored)",
+            "users interstitial comment\n(should be ignored)",
             "Primary key",
             "Id comment that is interstitial (should be ignored)",
             "Username for login",
@@ -587,7 +589,10 @@ mod tests {
         let comments = comments.comments();
         assert_eq!(comments.len(), 11);
         let first = &comments[0];
-        assert_eq!(first.kind().comment(), "Users table stores user account information multiline");
+        assert_eq!(
+            first.kind().comment(),
+            "Users table stores user account information\nmultiline"
+        );
         assert_eq!(first.span().start(), &Location::new(1, 1));
         assert_eq!(first.span().end().line(), 2);
         assert!(
@@ -595,7 +600,7 @@ mod tests {
             "end column should be after start column for first multiline comment",
         );
         let primary_key = &comments[1];
-        assert_eq!(primary_key.kind().comment(), "Primary key     multiline");
+        assert_eq!(primary_key.kind().comment(), "Primary key\nmultiline");
         assert_eq!(primary_key.span().start(), &Location::new(4, 5));
         assert_eq!(primary_key.span().end().line(), 5);
         assert!(

@@ -283,43 +283,40 @@ mod tests {
         let second_docs = SqlDocs::new(vec![
             TableDoc::new(
                 "users".to_string(),
-                Some("Users table stores user account information multiline".to_string()),
+                Some("Users table stores user account information\nmultiline".to_string()),
                 vec![
-                    ColumnDoc::new("id".to_string(), Some("Primary key     multiline".to_string())),
+                    ColumnDoc::new("id".to_string(), Some("Primary key\nmultiline".to_string())),
                     ColumnDoc::new(
                         "username".to_string(),
-                        Some("Username for login     multiline".to_string()),
+                        Some("Username for login\nmultiline".to_string()),
                     ),
                     ColumnDoc::new(
                         "email".to_string(),
-                        Some("Email address     multiline".to_string()),
+                        Some("Email address\nmultiline".to_string()),
                     ),
                     ColumnDoc::new(
                         "created_at".to_string(),
-                        Some("When the user registered     multiline".to_string()),
+                        Some("When the user registered\nmultiline".to_string()),
                     ),
                 ],
             ),
             TableDoc::new(
                 "posts".to_string(),
-                Some("Posts table stores blog posts multiline".to_string()),
+                Some("Posts table stores blog posts\nmultiline".to_string()),
                 vec![
-                    ColumnDoc::new("id".to_string(), Some("Primary key     multiline".to_string())),
-                    ColumnDoc::new(
-                        "title".to_string(),
-                        Some("Post title     multiline".to_string()),
-                    ),
+                    ColumnDoc::new("id".to_string(), Some("Primary key\nmultiline".to_string())),
+                    ColumnDoc::new("title".to_string(), Some("Post title\nmultiline".to_string())),
                     ColumnDoc::new(
                         "user_id".to_string(),
-                        Some("Foreign key linking to users     multiline".to_string()),
+                        Some("Foreign key linking to users\nmultiline".to_string()),
                     ),
                     ColumnDoc::new(
                         "body".to_string(),
-                        Some("Main body text     multiline".to_string()),
+                        Some("Main body text\nmultiline".to_string()),
                     ),
                     ColumnDoc::new(
                         "published_at".to_string(),
-                        Some("When the post was created     multiline".to_string()),
+                        Some("When the post was created\nmultiline".to_string()),
                     ),
                 ],
             ),
