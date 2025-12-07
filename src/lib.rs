@@ -166,13 +166,13 @@ mod tests {
         let table_names = ["users", "posts"];
         let table_comments =
             ["Users table stores user account information", "Posts table stores blog posts"];
-        for (i, (_, sqldoc)) in generated_docs.iter().enumerate() {
-            assert_eq!(sqldoc.tables()[i].name(), table_names[i]);
-            let sqldoc_table_doc = sqldoc.tables()[i]
+        for (i, (_, parsed_doc)) in generated_docs.iter().enumerate() {
+            assert_eq!(parsed_doc.tables()[i].name(), table_names[i]);
+            let parsed_doc_table_doc = parsed_doc.tables()[i]
                 .doc()
                 .as_ref()
-                .map_or_else(|| panic!("unable to find sqldoc table doc"), |val| val);
-            assert_eq!(sqldoc_table_doc, table_comments[i]);
+                .map_or_else(|| panic!("unable to find SqlDocs table doc"), |val| val);
+            assert_eq!(parsed_doc_table_doc, table_comments[i]);
         }
         let user_columns = ["id", "username", "email", "created_at"];
         let user_columns_comments =
