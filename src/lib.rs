@@ -4,104 +4,14 @@
 //! - [`ast`]      : parse SQL into an AST using [`sqlparser`]
 //! - [`comments`] : extract and model comments and spans
 
-use core::fmt;
-use std::{
-    error,
-    fmt::Debug,
-    path::{Path, PathBuf},
-};
-
-use sqlparser::parser::ParserError;
-
-use crate::{
-    ast::ParsedSqlFileSet,
-    comments::{CommentError, Comments},
-    docs::SqlDocs,
-    files::SqlFileSet,
-};
+use crate::{ast::ParsedSqlFileSet, comments::Comments, docs::SqlDocs, files::SqlFileSet};
+pub use error::DocError;
+use std::path::{Path, PathBuf};
 pub mod ast;
 pub mod comments;
 pub mod docs;
+pub mod error;
 pub mod files;
-
-/// Error enum for returning relevant error based on error type
-#[derive(Debug)]
-pub enum DocError {
-    /// Wrapper for standard [`std::io::Error`]
-    FileReadError(std::io::Error),
-    /// Wrapper for [`CommentError`]
-    CommentError(CommentError),
-    /// Wrapper for [`ParserError`]
-    SqlParserError(ParserError),
-}
-
-impl fmt::Display for DocError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::FileReadError(error) => write!(f, "file read error: {error}"),
-            Self::CommentError(comment_error) => {
-                write!(f, "comment parse error: {comment_error}")
-            }
-            Self::SqlParserError(parser_error) => write!(f, "SQL parse error {parser_error}"),
-        }
-    }
-}
-
-impl error::Error for DocError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::FileReadError(e) => Some(e),
-            Self::CommentError(e) => Some(e),
-            Self::SqlParserError(e) => Some(e),
-        }
-    }
-}
-
-impl From<std::io::Error> for DocError {
-    fn from(e: std::io::Error) -> Self {
-        Self::FileReadError(e)
-    }
-}
-
-impl From<CommentError> for DocError {
-    fn from(e: CommentError) -> Self {
-        Self::CommentError(e)
-    }
-}
-
-impl From<ParserError> for DocError {
-    fn from(e: ParserError) -> Self {
-        Self::SqlParserError(e)
-    }
-}
-
-/// Struct for the SqlDoc
-pub struct SqlDoc {
-    files: Vec<(PathBuf, SqlDocs)>,
-}
-
-impl SqlDoc {
-    pub fn table (&self, name: &str) -> Result<&TableDoc, DocError> {
-
-    }
-    pub fn table_with_schema(&self, schema: &str, name: &str) -> Result<&TableDoc, DocError> {
-
-    }
-    pub fn from_path(path: &Path) ->  {
-
-    }
-}
-/// Builder struct for the [`SqlDoc`]
-pub struct SqlDocBuilder {
-    sql_docs: SqlDoc,
-}
-impl SqlDocsBuilder {
-    fn new() -> Self {
-        Self {}
-    }
-}
-
-
 
 /// Primary Entry point. Returns a tuple of [`PathBuf`] and [`SqlDocs`].
 ///
@@ -112,7 +22,7 @@ impl SqlDocsBuilder {
 ///   other file types to ignore).
 ///
 /// # Errors
-/// - Will return a `DocError` that  specifies the error (io, comment parsing,
+/// - Will return a [`DocError`] that  specifies the error (io, comment parsing,
 ///   sql parsing)
 ///
 /// # Example
@@ -136,7 +46,7 @@ pub fn generate_docs_from_dir<P: AsRef<Path>, S: AsRef<str>>(
     // iterate on each file and generate the `SqlDocs` and associate with the `Path`
     for file in parsed_files.files() {
         let comments = Comments::parse_all_comments_from_file(file)?;
-        let docs = SqlDocs::from_parsed_file(file, &comments);
+        let docs = SqlDocs::from_parsed_file(file, &comments)?;
         let path = file.file().path().to_path_buf();
         sql_docs.push((path, docs));
     }

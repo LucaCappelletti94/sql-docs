@@ -1,8 +1,8 @@
 //! Module for parsing sql and comments and returning `table` and `column`
 //! information, including comments
-use sqlparser::ast::{Spanned, Statement};
+use sqlparser::ast::{Ident, ObjectName, ObjectNamePart, Spanned, Statement};
 
-use crate::{ast::ParsedSqlFile, comments::Comments};
+use crate::{ast::ParsedSqlFile, comments::Comments, error::DocError};
 
 /// Structure for containing the `name` of the `Column` and an [`Option`] for
 /// the comment as a [`String`]
@@ -38,12 +38,12 @@ impl ColumnDoc {
 }
 
 /// Structure for containing the `name` of the `Table`, an [`Option`] for if the
-/// table has a schema,  an [`Option`] for the comment as a [`String`], and a 
+/// table has a schema,  an [`Option`] for the comment as a [`String`], and a
 /// `Vec` of [`ColumnDoc`] contained in the table
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TableDoc {
-    name: String,
     schema: Option<String>,
+    name: String,
     doc: Option<String>,
     columns: Vec<ColumnDoc>,
 }
@@ -57,8 +57,13 @@ impl TableDoc {
     /// - columns: the `Vec<ColumnDoc>` of all [`ColumnDoc`] for this table
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
-    pub fn new(name: String, doc: Option<String>, columns: Vec<ColumnDoc>) -> Self {
-        Self { name, doc, columns }
+    pub fn new(
+        schema: Option<String>,
+        name: String,
+        doc: Option<String>,
+        columns: Vec<ColumnDoc>,
+    ) -> Self {
+        Self { schema, name, doc, columns }
     }
 
     /// Getter for the `name` field
@@ -109,8 +114,11 @@ impl SqlDocs {
     /// # Parameters
     /// - `file`: the [`ParsedSqlFile`]
     /// - `comments`: the parsed [`Comments`]
-    #[must_use]
-    pub fn from_parsed_file(file: &ParsedSqlFile, comments: &Comments) -> Self {
+    ///
+    /// # Errors
+    /// - Returns [`DocError::InvalidObjectName`] if the table name has no identifier components.
+    /// - May also propagate other [`DocError`] variants from lower layers in the future.
+    pub fn from_parsed_file(file: &ParsedSqlFile, comments: &Comments) -> Result<Self, DocError> {
         let mut tables = Vec::new();
         for statement in file.statements() {
             #[allow(clippy::single_match)]
@@ -131,13 +139,15 @@ impl SqlDocs {
                         column_docs.push(column_doc);
                     }
                     let table_leading = comments.leading_comment(table_start);
+                    let (schema, name) = schema_and_table(&table.name)?;
                     let table_doc = match table_leading {
                         Some(comment) => TableDoc::new(
-                            table.name.to_string(),
+                            schema,
+                            name,
                             Some(comment.text().to_string()),
                             column_docs,
                         ),
-                        None => TableDoc::new(table.name.to_string(), None, column_docs),
+                        None => TableDoc::new(schema, name, None, column_docs),
                     };
                     tables.push(table_doc);
                 }
@@ -146,7 +156,7 @@ impl SqlDocs {
             }
         }
 
-        Self { tables }
+        Ok(Self { tables })
     }
 
     /// Getter function to get a slice of [`TableDoc`]
@@ -156,8 +166,37 @@ impl SqlDocs {
     }
 }
 
+/// Helper function that will parse the table's schema and table name.
+/// Easily extensible for catalog if neeeded as well.
+///
+/// # Parameters
+/// - `name` the [`ObjectName`] structure for the statement
+///
+/// # Errors
+/// - [`DocError`] will return the location of the statement if there is a statement without a schema and table name.
+fn schema_and_table(name: &ObjectName) -> Result<(Option<String>, String), DocError> {
+    let idents: Vec<&Ident> = name
+        .0
+        .iter()
+        .filter_map(|part| match part {
+            ObjectNamePart::Identifier(ident) => Some(ident),
+            ObjectNamePart::Function(_func) => None,
+        })
+        .collect();
 
-
+    match idents.as_slice() {
+        [] => {
+            let span = name.span();
+            Err(DocError::InvalidObjectName {
+                message: "ObjectName had no identifier parts".to_string(),
+                line: span.start.line,
+                column: span.start.column,
+            })
+        }
+        [only] => Ok((None, only.value.clone())),
+        [.., schema, table] => Ok((Some(schema.value.clone()), table.value.clone())),
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -167,8 +206,12 @@ mod tests {
     fn test_sql_docs_struct() {
         let column_doc = ColumnDoc::new("id".to_string(), Some("The ID for the table".to_string()));
         let columns = vec![column_doc];
-        let table_doc =
-            TableDoc::new("user".to_string(), Some("The table for users".to_string()), columns);
+        let table_doc = TableDoc::new(
+            None,
+            "user".to_string(),
+            Some("The table for users".to_string()),
+            columns,
+        );
         let tables = vec![table_doc];
         let sql_doc = SqlDocs::new(tables);
         let sql_doc_val =
@@ -202,14 +245,14 @@ mod tests {
 
             match filename {
                 "with_single_line_comments.sql" | "with_mixed_comments.sql" => {
-                    assert_eq!(&docs, &expected_values[0]);
+                    assert_eq!(&docs?, &expected_values[0]);
                 }
                 "with_multiline_comments.sql" => {
-                    assert_eq!(&docs, &expected_values[1]);
+                    assert_eq!(&docs?, &expected_values[1]);
                 }
                 "without_comments.sql" => {
                     let expected = expected_without_comments_docs();
-                    assert_eq!(&docs, &expected);
+                    assert_eq!(&docs?, &expected);
                 }
                 other => {
                     unreachable!(
@@ -225,6 +268,7 @@ mod tests {
     fn expected_without_comments_docs() -> SqlDocs {
         SqlDocs::new(vec![
             TableDoc::new(
+                None,
                 "users".to_string(),
                 None,
                 vec![
@@ -235,6 +279,7 @@ mod tests {
                 ],
             ),
             TableDoc::new(
+                None,
                 "posts".to_string(),
                 None,
                 vec![
@@ -253,6 +298,7 @@ mod tests {
 
         let first_docs = SqlDocs::new(vec![
             TableDoc::new(
+                None,
                 "users".to_string(),
                 Some("Users table stores user account information".to_string()),
                 vec![
@@ -266,6 +312,7 @@ mod tests {
                 ],
             ),
             TableDoc::new(
+                None,
                 "posts".to_string(),
                 Some("Posts table stores blog posts".to_string()),
                 vec![
@@ -287,6 +334,7 @@ mod tests {
 
         let second_docs = SqlDocs::new(vec![
             TableDoc::new(
+                None,
                 "users".to_string(),
                 Some("Users table stores user account information\nmultiline".to_string()),
                 vec![
@@ -306,6 +354,7 @@ mod tests {
                 ],
             ),
             TableDoc::new(
+                None,
                 "posts".to_string(),
                 Some("Posts table stores blog posts\nmultiline".to_string()),
                 vec![
