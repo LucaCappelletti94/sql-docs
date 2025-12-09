@@ -91,12 +91,12 @@ impl TableDoc {
 /// Structure for containing the docs for every `Table` in an `.sql` file as a
 /// `Vec` of [`TableDoc`]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SqlDocs {
+pub struct SqlFileDoc {
     tables: Vec<TableDoc>,
 }
 
-impl SqlDocs {
-    /// Create a new instance of [`SqlDocs`]
+impl SqlFileDoc {
+    /// Create a new instance of [`SqlFileDoc`]
     ///
     /// # Parameters
     /// - `tables` the `Vec` of [`TableDoc`] for the struct
@@ -200,7 +200,7 @@ fn schema_and_table(name: &ObjectName) -> Result<(Option<String>, String), DocEr
 
 #[cfg(test)]
 mod tests {
-    use crate::docs::{ColumnDoc, SqlDocs, TableDoc};
+    use crate::docs::{ColumnDoc, SqlFileDoc, TableDoc};
 
     #[test]
     fn test_sql_docs_struct() {
@@ -213,7 +213,7 @@ mod tests {
             columns,
         );
         let tables = vec![table_doc];
-        let sql_doc = SqlDocs::new(tables);
+        let sql_doc = SqlFileDoc::new(tables);
         let sql_doc_val =
             sql_doc.tables().first().map_or_else(|| panic!("unable to find tables"), |val| val);
         assert_eq!(sql_doc_val.name(), "user");
@@ -235,7 +235,7 @@ mod tests {
 
         for file in parsed_set.files() {
             let comments = Comments::parse_all_comments_from_file(file)?;
-            let docs = SqlDocs::from_parsed_file(file, &comments);
+            let docs = SqlFileDoc::from_parsed_file(file, &comments);
             let filename = file
                 .file()
                 .path()
@@ -265,8 +265,8 @@ mod tests {
         Ok(())
     }
 
-    fn expected_without_comments_docs() -> SqlDocs {
-        SqlDocs::new(vec![
+    fn expected_without_comments_docs() -> SqlFileDoc {
+        SqlFileDoc::new(vec![
             TableDoc::new(
                 None,
                 "users".to_string(),
@@ -293,10 +293,10 @@ mod tests {
         ])
     }
 
-    fn expect_values() -> Vec<SqlDocs> {
+    fn expect_values() -> Vec<SqlFileDoc> {
         let mut docs = Vec::new();
 
-        let first_docs = SqlDocs::new(vec![
+        let first_docs = SqlFileDoc::new(vec![
             TableDoc::new(
                 None,
                 "users".to_string(),
@@ -332,7 +332,7 @@ mod tests {
         ]);
         docs.push(first_docs);
 
-        let second_docs = SqlDocs::new(vec![
+        let second_docs = SqlFileDoc::new(vec![
             TableDoc::new(
                 None,
                 "users".to_string(),

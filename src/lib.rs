@@ -4,7 +4,7 @@
 //! - [`ast`]      : parse SQL into an AST using [`sqlparser`]
 //! - [`comments`] : extract and model comments and spans
 
-use crate::{ast::ParsedSqlFileSet, comments::Comments, docs::SqlDocs, files::SqlFileSet};
+use crate::{ast::ParsedSqlFileSet, comments::Comments, docs::SqlFileDoc, files::SqlFileSet};
 pub use error::DocError;
 use std::path::{Path, PathBuf};
 pub mod ast;
@@ -12,8 +12,10 @@ pub mod comments;
 pub mod docs;
 pub mod error;
 pub mod files;
+mod sql_doc;
+pub use sql_doc::SqlDoc;
 
-/// Primary Entry point. Returns a tuple of [`PathBuf`] and [`SqlDocs`].
+/// Primary Entry point. Returns a tuple of [`PathBuf`] and [`SqlFileDoc`].
 ///
 /// # Parameters:
 /// - `dir`: the [`Path`] to recursively parse `.sql` files. Allows for coercion
@@ -33,7 +35,7 @@ pub mod files;
 pub fn generate_docs_from_dir<P: AsRef<Path>, S: AsRef<str>>(
     dir: P,
     deny_list: &[S],
-) -> Result<Vec<(PathBuf, SqlDocs)>, DocError> {
+) -> Result<Vec<(PathBuf, SqlFileDoc)>, DocError> {
     // Convert deny list to a `Vec<String>`
     let deny_vec: Vec<String> = deny_list.iter().map(|file| file.as_ref().to_string()).collect();
     // verify whether deny_list is empty and return correct `Option`
@@ -43,17 +45,17 @@ pub fn generate_docs_from_dir<P: AsRef<Path>, S: AsRef<str>>(
     // parse all files sql
     let parsed_files = ParsedSqlFileSet::parse_all(file_set)?;
     let mut sql_docs = Vec::new();
-    // iterate on each file and generate the `SqlDocs` and associate with the `Path`
+    // iterate on each file and generate the `SqlFileDoc` and associate with the `Path`
     for file in parsed_files.files() {
         let comments = Comments::parse_all_comments_from_file(file)?;
-        let docs = SqlDocs::from_parsed_file(file, &comments)?;
+        let docs = SqlFileDoc::from_parsed_file(file, &comments)?;
         let path = file.file().path().to_path_buf();
         sql_docs.push((path, docs));
     }
     Ok(sql_docs)
 }
 
-/// Secondary Entry point. Returns a tuple of [`PathBuf`] and [`SqlDocs`].
+/// Secondary Entry point. Returns a tuple of [`PathBuf`] and [`SqlFileDoc`].
 /// Useful when no deny list is needed
 ///
 /// # Parameters:
@@ -71,7 +73,7 @@ pub fn generate_docs_from_dir<P: AsRef<Path>, S: AsRef<str>>(
 /// ```
 pub fn generate_docs_from_dir_no_deny<P: AsRef<Path>>(
     dir: P,
-) -> Result<Vec<(PathBuf, SqlDocs)>, DocError> {
+) -> Result<Vec<(PathBuf, SqlFileDoc)>, DocError> {
     generate_docs_from_dir::<P, &str>(dir, &[])
 }
 
@@ -109,7 +111,7 @@ mod tests {
             let parsed_doc_table_doc = parsed_doc.tables()[i]
                 .doc()
                 .as_ref()
-                .map_or_else(|| panic!("unable to find SqlDocs table doc"), |val| val);
+                .map_or_else(|| panic!("unable to find SqlFileDoc table doc"), |val| val);
             assert_eq!(parsed_doc_table_doc, table_comments[i]);
         }
         let user_columns = ["id", "username", "email", "created_at"];
