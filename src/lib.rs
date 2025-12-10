@@ -11,7 +11,7 @@ pub mod comments;
 pub mod docs;
 pub mod error;
 pub mod files;
-mod sql_doc;
+pub mod sql_doc;
 pub use sql_doc::SqlDoc;
 
 // #[cfg(test)]
