@@ -206,9 +206,10 @@ mod tests {
         fs::create_dir_all(&base)?;
         let file = base.join("test_file.sql");
         let sample = sample_sql();
-        let (contents, expected) = sample.first().map_or_else(|| panic!("unable to parse hard coded values"), |val| val);
-        fs::write(&file, contents)?;
+        let (mut contents, mut expected): (Vec<_>, Vec<_>) = sample.into_iter().map(|(a, b)| (a, b)).unzip();;
+        fs::write(&file, contents.join(""))?;
         let sql_doc = SqlDoc::from_path(file).build()?;
+        todo!("combine the sample sqldocs Table Docs for testing");
         assert_eq!(&sql_doc, expected);
         Ok(())
     }
