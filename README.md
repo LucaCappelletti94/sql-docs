@@ -2,6 +2,7 @@
 
 [![License](https://img.shields.io/badge/GPL-3%20-blue.svg)](https://opensource.org/license/gpl-3-0)
 [![Codecov](https://codecov.io/gh/rpg-alex/sql-docs/branch/main/graph/badge.svg)](https://codecov.io/gh/rpg-alex)
+
 This crate extracts *documentation* from SQL files by parsing:
 
 - SQL statements (via [DataFusion’s SQL Parser](https://github.com/apache/datafusion-sqlparser-rs/))
