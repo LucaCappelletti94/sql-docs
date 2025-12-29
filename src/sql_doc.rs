@@ -668,4 +668,18 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
         Ok(())
     }
+    #[test]
+    fn test_sql_doc_from_str_builds_expected_builder() {
+        let content = "CREATE TABLE t(id INTEGER);";
+
+        let actual = SqlDoc::from_str(content);
+
+        let expected = SqlDocBuilder {
+            source: crate::sql_doc::SqlFileDocSource::FromString(content),
+            deny: vec![],
+            multiline_flat: MultiFlatten::NoFlat,
+        };
+
+        assert_eq!(actual, expected);
+    }
 }

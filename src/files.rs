@@ -352,4 +352,31 @@ mod tests {
         let bad_file_list = SqlFileSet::new(Path::new(invalid_dir), &[]);
         assert!(bad_file_list.is_err());
     }
+    #[test]
+    fn test_from_sql_files_list_into_vec_pathbuf_preserves_contents_and_order()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let base = env::temp_dir().join("from_impl_sql_files_list_test");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base)?;
+        let file1 = base.join("one.sql");
+        let file2 = base.join("two.sql");
+        let noise = base.join("ignore.txt");
+        fs::File::create(&file1)?;
+        fs::File::create(&file2)?;
+        fs::File::create(&noise)?;
+        let sql_file_list = SqlFilesList::new(&base, &[])?;
+        let expected: Vec<PathBuf> = sql_file_list.sql_files().to_vec();
+        let got: Vec<PathBuf> = Vec::from(sql_file_list);
+        assert_eq!(got, expected);
+        let _ = fs::remove_dir_all(&base);
+        Ok(())
+    }
+    #[test]
+    fn test_sql_file_new_from_str_has_no_path_and_preserves_content() {
+        let sql = "SELECT * FROM users;".to_string();
+        let file = SqlFile::new_from_str(sql.clone());
+        assert!(file.path().is_none());
+        assert!(file.path_into_path_buf().is_none());
+        assert_eq!(file.content(), sql);
+    }
 }

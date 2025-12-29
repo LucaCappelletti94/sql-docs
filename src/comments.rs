@@ -521,7 +521,7 @@ CREATE TABLE posts (
     }
 
     fn multiline_comments_sql() -> &'static str {
-        r#"/* Users table stores user account information 
+        r"/* Users table stores user account information 
 multiline */
 CREATE TABLE users (
     /* Primary key 
@@ -556,7 +556,7 @@ CREATE TABLE posts (
     /* When the post was created 
     multiline */
     published_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);"#
+);"
     }
 
     fn no_comments_sql() -> &'static str {

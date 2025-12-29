@@ -319,7 +319,7 @@ mod tests {
         assert_eq!(sql_doc_val_column.name(), "id");
     }
 
- fn single_line_comments_sql() -> &'static str {
+    fn single_line_comments_sql() -> &'static str {
         "-- Users table stores user account information
 CREATE TABLE users (
     -- Primary key
@@ -348,7 +348,7 @@ CREATE TABLE posts (
     }
 
     fn multiline_comments_sql() -> &'static str {
-        r#"/* Users table stores user account information 
+        r"/* Users table stores user account information 
 multiline */
 CREATE TABLE users (
     /* Primary key 
@@ -383,7 +383,7 @@ CREATE TABLE posts (
     /* When the post was created 
     multiline */
     published_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);"#
+);"
     }
 
     fn no_comments_sql() -> &'static str {
@@ -434,7 +434,6 @@ CREATE TABLE posts (
 );
 "
     }
-
 
     #[test]
     fn generate_docs_files() -> Result<(), Box<dyn std::error::Error>> {
@@ -826,5 +825,28 @@ CREATE TABLE posts (
         assert_eq!(cols[0].doc(), Some("primary key"));
         assert_eq!(cols[1].name(), "username");
         assert_eq!(cols[1].doc(), Some("login name"));
+    }
+    #[test]
+    fn test_from_sql_file_doc_into_vec_table_doc_preserves_contents_and_order() {
+        let t1 = TableDoc::new(
+            None,
+            "users".to_string(),
+            Some("users doc".to_string()),
+            vec![ColumnDoc::new("id".to_string(), Some("pk".to_string()))],
+            None,
+        );
+        let t2 = TableDoc::new(
+            Some("analytics".to_string()),
+            "events".to_string(),
+            None,
+            vec![ColumnDoc::new("payload".to_string(), None)],
+            None,
+        );
+
+        let sql_file_doc = SqlFileDoc::new(vec![t1.clone(), t2.clone()]);
+        let got: Vec<TableDoc> = Vec::from(sql_file_doc);
+
+        let expected = vec![t1, t2];
+        assert_eq!(got, expected);
     }
 }
