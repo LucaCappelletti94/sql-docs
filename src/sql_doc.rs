@@ -1,4 +1,4 @@
-//! Module for the top level `SqlDoc` structure.
+//! Public entry point for building [`SqlDoc`] from a directory, file, or string.
 
 use std::path::{Path, PathBuf};
 
@@ -10,7 +10,7 @@ use crate::{
     files::{SqlFile, SqlFilesList},
 };
 
-/// Structure for Sql Documentation, built from [`TableDoc`] and
+/// Top-level documentation object containing all discovered [`TableDoc`] entries.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SqlDoc {
     /// Holds the [`Vec`] of all tables found in all specified files.
@@ -70,7 +70,7 @@ impl SqlDoc {
         }
     }
 
-    /// Method for generating builder from a [`str`]
+    /// Creates a builder from SQL text (no filesystem path is associated) from a [`str`]
     #[must_use]
     pub const fn from_str(content: &str) -> SqlDocBuilder<'_> {
         SqlDocBuilder {
@@ -168,13 +168,16 @@ impl SqlDocBuilder<'_> {
         self.multiline_flat = MultiFlatten::Flatten(suffix.to_string());
         self
     }
-    /// Method to set multiline comments to preserver multiple lines
+    /// Method to set multiline comments to preserve multiple lines
     #[must_use]
     pub fn preserve_multiline(mut self) -> Self {
         self.multiline_flat = MultiFlatten::NoFlat;
         self
     }
     /// Builds the [`SqlDoc`]
+    ///
+    ///
+    /// Comment flattening (if enabled) is applied as a post-processing step after docs are generated.
     ///
     /// # Errors
     /// - Will return `DocError` bubbled up

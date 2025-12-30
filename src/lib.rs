@@ -1,10 +1,14 @@
 #![doc = include_str!("../README.md")]
-//! Module layout:
-//! - [`files`]    : discover and load `.sql` files from disk
-//! - [`ast`]      : parse SQL into an AST using [`sqlparser`]
-//! - [`comments`] : extract and model comments and spans
-//! - [`docs`]     : Generates a struct to hold [`docs::TableDoc`]
-//! - [`sql_doc`]  : Creates the [`SqlDoc`] structure
+//!
+//! ## Module layout
+//!
+//! - [`files`]    — Discover and load `.sql` files from disk
+//! - [`ast`]      — Parse SQL into an AST using [`sqlparser`]
+//! - [`comments`] — Extract and model SQL comments and spans
+//! - [`docs`]     — Generate structured documentation (`TableDoc`, `ColumnDoc`)
+//! - [`sql_doc`]  — Build the top-level [`SqlDoc`] and primary entry point
+//!
+//! **Start here:** [`SqlDoc::from_dir`] or [`SqlDoc::from_path`]
 
 pub mod ast;
 pub mod comments;

@@ -1,14 +1,15 @@
-//! Module for crawling the SQL documents based on the parser and
-//! parsing/extracting the leading comments.
+//! Extract comment spans from parsed SQL files.
 //!
-//! *leading comment* a comment that
-//! precedes an SQL Statement.
+//! Definitions used throughout this crate:
+//! - **leading**: a comment that appears on lines immediately preceding a statement/column
+//! - **inline**: a comment that appears after code on the same line (ignored)
+//! - **interstitial**: a comment inside a statement (ignored)
+
 use std::fmt;
 
 use crate::ast::ParsedSqlFile;
 
-/// Structure for holding a location in the file. Assumes file is first split by
-/// lines and then split by characters (column)
+/// Represents a line/column location within a source file.
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct Location {
     line: u64,
@@ -45,7 +46,7 @@ impl Default for Location {
     }
 }
 
-/// A structure for holding the span of comments found
+/// Represents a start/end span (inclusive/exclusive as used by this crate) for a comment in a file.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Span {
     start: Location,

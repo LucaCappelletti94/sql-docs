@@ -1,9 +1,12 @@
-//! Module for managing Document Errors as [`DocError`]
+//! Error types returned by this crate’s public APIs.
+
 use crate::{comments::CommentError, docs::TableDoc};
 use core::fmt;
 use sqlparser::parser::ParserError;
 use std::{error, fmt::Debug};
-/// Error enum for returning relevant error based on error type
+
+/// Errors that can occur while discovering, parsing, or documenting SQL files.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum DocError {
     /// Wrapper for standard [`std::io::Error`]

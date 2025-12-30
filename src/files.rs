@@ -1,5 +1,6 @@
-//! Module that offers utilities for discovering, filtering, and loading `.sql`
-//! files from the filesystem.
+//! Discover and filter `.sql` files on disk.
+//!
+//! This module finds file paths; it does not parse SQL or extract comments.
 
 use std::{
     fs, io,
@@ -37,9 +38,8 @@ impl SqlFilesList {
     /// Creates a list of `.sql` files under `path`, optionally excluding files
     /// whose full paths appear in `deny_list`.
     ///
-    /// Paths in `deny_list` must match exactly the `PathBuf` returned by
-    /// recursion. For convenience, the top-level API accepts `&[&str]`
-    /// instead.
+    /// Deny entries must match the discovered full path exactly (string equality on
+    /// the resulting [`PathBuf`]).
     ///
     /// # Parameters
     ///
@@ -60,7 +60,7 @@ impl SqlFilesList {
         Ok(Self { sql_files: allow_list })
     }
 
-    /// Returns the discovered `.sql` files in their original order.
+    /// Returns discovered `.sql` files in discovery order (filesystem-dependent).
     #[must_use]
     pub fn sql_files(&self) -> &[PathBuf] {
         &self.sql_files

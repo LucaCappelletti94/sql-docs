@@ -1,5 +1,5 @@
-//! Module for parsing sql and comments and returning `table` and `column`
-//! information, including comments
+//! Convert parsed SQL + extracted comments into structured documentation types.
+
 use core::fmt;
 use std::path::PathBuf;
 
@@ -124,6 +124,12 @@ impl TableDoc {
     pub fn columns_mut(&mut self) -> &mut [ColumnDoc] {
         &mut self.columns
     }
+
+    /// Getter method for retrieving the table's [`PathBuf`]
+    #[must_use]
+    pub const fn path(&self) -> &Option<PathBuf> {
+        &self.path
+    }
 }
 
 impl fmt::Display for TableDoc {
@@ -237,6 +243,7 @@ impl SqlFileDoc {
     }
 }
 
+/// Converts a file doc into its table docs (consumes the [`SqlFileDoc`]).
 impl From<SqlFileDoc> for Vec<TableDoc> {
     fn from(value: SqlFileDoc) -> Self {
         value.tables
@@ -286,7 +293,7 @@ fn schema_and_table(name: &ObjectName) -> Result<(Option<String>, String), DocEr
 #[cfg(test)]
 mod tests {
     use core::fmt;
-    use std::{env, fs};
+    use std::{env, fs, path::PathBuf};
 
     use sqlparser::{
         ast::{Ident, ObjectName, ObjectNamePart, ObjectNamePartFunction},
@@ -848,5 +855,16 @@ CREATE TABLE posts (
 
         let expected = vec![t1, t2];
         assert_eq!(got, expected);
+    }
+    #[test]
+    fn table_doc_path_getter_returns_expected_value() {
+        let mut table = TableDoc::new(None, "users".to_string(), None, Vec::new(), None);
+        assert_eq!(table.path(), &None);
+        let pb = PathBuf::from("some/dir/file.sql");
+        table.set_path(Some(pb.clone()));
+        assert_eq!(table.path(), &Some(pb));
+        let no_path: Option<PathBuf> = None;
+        table.set_path(no_path);
+        assert_eq!(table.path(), &None);
     }
 }

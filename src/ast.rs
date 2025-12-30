@@ -1,5 +1,7 @@
-//! Module for parsing the SQL and then using the resulting AST that will later
-//! be used in `comments` module
+//! Parse SQL text into an AST (`sqlparser`) for downstream comment attachment.
+//!
+//! This module does not interpret semantics; it only produces an AST + file metadata.
+
 use std::path::{Path, PathBuf};
 
 use sqlparser::{
@@ -17,17 +19,16 @@ pub struct ParsedSqlFile {
 }
 
 impl ParsedSqlFile {
-    /// A parsed SQL file containing `DataFusion` AST nodes paired with their
-    /// spans.
+    /// Parses a [`SqlFile`] into `sqlparser` [`Statement`] nodes.
     ///
-    /// This struct wraps DataFusion’s `Statement` parsing so we can attach
-    /// leading comments later in the pipeline.
+    /// This is the AST layer used by the `comments` module to attach leading
+    /// comment spans to statements/columns.
     ///
     /// # Parameters
-    /// - `file` is the [`SqlFile`] that will be parsed
+    /// - `file`: the [`SqlFile`] to parse
     ///
     /// # Errors
-    /// - [`ParserError`] is returned for any errors parsing
+    /// - Returns [`ParserError`] if parsing fails
     pub fn parse(file: SqlFile) -> Result<Self, ParserError> {
         let dialect = GenericDialect {};
         let statements = Parser::parse_sql(&dialect, file.content())?;
