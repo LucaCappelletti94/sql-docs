@@ -200,7 +200,7 @@ impl SqlFileDoc {
                         let column_name = column.name.value.clone();
                         let column_doc = match column_leading {
                             Some(col_comment) => {
-                                ColumnDoc::new(column_name, Some(col_comment.text().to_string()))
+                                ColumnDoc::new(column_name, Some(col_comment.text().to_owned()))
                             }
                             None => ColumnDoc::new(column_name, None),
                         };
@@ -211,7 +211,7 @@ impl SqlFileDoc {
                     let table_doc = TableDoc::new(
                         schema,
                         name,
-                        table_leading.as_ref().map(|c| c.text().to_string()),
+                        table_leading.as_ref().map(|c| c.text().to_owned()),
                         column_docs,
                         file.path_into_path_buf(),
                     );
@@ -280,7 +280,7 @@ fn schema_and_table(name: &ObjectName) -> Result<(Option<String>, String), DocEr
         [] => {
             let span = name.span();
             Err(DocError::InvalidObjectName {
-                message: "ObjectName had no identifier parts".to_string(),
+                message: "ObjectName had no identifier parts".to_owned(),
                 line: span.start.line,
                 column: span.start.column,
             })
@@ -307,12 +307,12 @@ mod tests {
 
     #[test]
     fn test_sql_docs_struct() {
-        let column_doc = ColumnDoc::new("id".to_string(), Some("The ID for the table".to_string()));
+        let column_doc = ColumnDoc::new("id".to_owned(), Some("The ID for the table".to_owned()));
         let columns = vec![column_doc];
         let table_doc = TableDoc::new(
             None,
-            "user".to_string(),
-            Some("The table for users".to_string()),
+            "user".to_owned(),
+            Some("The table for users".to_owned()),
             columns,
             None,
         );
@@ -511,26 +511,26 @@ CREATE TABLE posts (
         SqlFileDoc::new(vec![
             TableDoc::new(
                 None,
-                "users".to_string(),
+                "users".to_owned(),
                 None,
                 vec![
-                    ColumnDoc::new("id".to_string(), None),
-                    ColumnDoc::new("username".to_string(), None),
-                    ColumnDoc::new("email".to_string(), None),
-                    ColumnDoc::new("created_at".to_string(), None),
+                    ColumnDoc::new("id".to_owned(), None),
+                    ColumnDoc::new("username".to_owned(), None),
+                    ColumnDoc::new("email".to_owned(), None),
+                    ColumnDoc::new("created_at".to_owned(), None),
                 ],
                 None,
             ),
             TableDoc::new(
                 None,
-                "posts".to_string(),
+                "posts".to_owned(),
                 None,
                 vec![
-                    ColumnDoc::new("id".to_string(), None),
-                    ColumnDoc::new("title".to_string(), None),
-                    ColumnDoc::new("user_id".to_string(), None),
-                    ColumnDoc::new("body".to_string(), None),
-                    ColumnDoc::new("published_at".to_string(), None),
+                    ColumnDoc::new("id".to_owned(), None),
+                    ColumnDoc::new("title".to_owned(), None),
+                    ColumnDoc::new("user_id".to_owned(), None),
+                    ColumnDoc::new("body".to_owned(), None),
+                    ColumnDoc::new("published_at".to_owned(), None),
                 ],
                 None,
             ),
@@ -543,34 +543,34 @@ CREATE TABLE posts (
         let first_docs = SqlFileDoc::new(vec![
             TableDoc::new(
                 None,
-                "users".to_string(),
-                Some("Users table stores user account information".to_string()),
+                "users".to_owned(),
+                Some("Users table stores user account information".to_owned()),
                 vec![
-                    ColumnDoc::new("id".to_string(), Some("Primary key".to_string())),
-                    ColumnDoc::new("username".to_string(), Some("Username for login".to_string())),
-                    ColumnDoc::new("email".to_string(), Some("Email address".to_string())),
+                    ColumnDoc::new("id".to_owned(), Some("Primary key".to_owned())),
+                    ColumnDoc::new("username".to_owned(), Some("Username for login".to_owned())),
+                    ColumnDoc::new("email".to_owned(), Some("Email address".to_owned())),
                     ColumnDoc::new(
-                        "created_at".to_string(),
-                        Some("When the user registered".to_string()),
+                        "created_at".to_owned(),
+                        Some("When the user registered".to_owned()),
                     ),
                 ],
                 None,
             ),
             TableDoc::new(
                 None,
-                "posts".to_string(),
-                Some("Posts table stores blog posts".to_string()),
+                "posts".to_owned(),
+                Some("Posts table stores blog posts".to_owned()),
                 vec![
-                    ColumnDoc::new("id".to_string(), Some("Primary key".to_string())),
-                    ColumnDoc::new("title".to_string(), Some("Post title".to_string())),
+                    ColumnDoc::new("id".to_owned(), Some("Primary key".to_owned())),
+                    ColumnDoc::new("title".to_owned(), Some("Post title".to_owned())),
                     ColumnDoc::new(
-                        "user_id".to_string(),
-                        Some("Foreign key linking to users".to_string()),
+                        "user_id".to_owned(),
+                        Some("Foreign key linking to users".to_owned()),
                     ),
-                    ColumnDoc::new("body".to_string(), Some("Main body text".to_string())),
+                    ColumnDoc::new("body".to_owned(), Some("Main body text".to_owned())),
                     ColumnDoc::new(
-                        "published_at".to_string(),
-                        Some("When the post was created".to_string()),
+                        "published_at".to_owned(),
+                        Some("When the post was created".to_owned()),
                     ),
                 ],
                 None,
@@ -581,43 +581,37 @@ CREATE TABLE posts (
         let second_docs = SqlFileDoc::new(vec![
             TableDoc::new(
                 None,
-                "users".to_string(),
-                Some("Users table stores user account information\nmultiline".to_string()),
+                "users".to_owned(),
+                Some("Users table stores user account information\nmultiline".to_owned()),
                 vec![
-                    ColumnDoc::new("id".to_string(), Some("Primary key\nmultiline".to_string())),
+                    ColumnDoc::new("id".to_owned(), Some("Primary key\nmultiline".to_owned())),
                     ColumnDoc::new(
-                        "username".to_string(),
-                        Some("Username for login\nmultiline".to_string()),
+                        "username".to_owned(),
+                        Some("Username for login\nmultiline".to_owned()),
                     ),
+                    ColumnDoc::new("email".to_owned(), Some("Email address\nmultiline".to_owned())),
                     ColumnDoc::new(
-                        "email".to_string(),
-                        Some("Email address\nmultiline".to_string()),
-                    ),
-                    ColumnDoc::new(
-                        "created_at".to_string(),
-                        Some("When the user registered\nmultiline".to_string()),
+                        "created_at".to_owned(),
+                        Some("When the user registered\nmultiline".to_owned()),
                     ),
                 ],
                 None,
             ),
             TableDoc::new(
                 None,
-                "posts".to_string(),
-                Some("Posts table stores blog posts\nmultiline".to_string()),
+                "posts".to_owned(),
+                Some("Posts table stores blog posts\nmultiline".to_owned()),
                 vec![
-                    ColumnDoc::new("id".to_string(), Some("Primary key\nmultiline".to_string())),
-                    ColumnDoc::new("title".to_string(), Some("Post title\nmultiline".to_string())),
+                    ColumnDoc::new("id".to_owned(), Some("Primary key\nmultiline".to_owned())),
+                    ColumnDoc::new("title".to_owned(), Some("Post title\nmultiline".to_owned())),
                     ColumnDoc::new(
-                        "user_id".to_string(),
-                        Some("Foreign key linking to users\nmultiline".to_string()),
+                        "user_id".to_owned(),
+                        Some("Foreign key linking to users\nmultiline".to_owned()),
                     ),
+                    ColumnDoc::new("body".to_owned(), Some("Main body text\nmultiline".to_owned())),
                     ColumnDoc::new(
-                        "body".to_string(),
-                        Some("Main body text\nmultiline".to_string()),
-                    ),
-                    ColumnDoc::new(
-                        "published_at".to_string(),
-                        Some("When the post was created\nmultiline".to_string()),
+                        "published_at".to_owned(),
+                        Some("When the post was created\nmultiline".to_owned()),
                     ),
                 ],
                 None,
@@ -630,26 +624,26 @@ CREATE TABLE posts (
 
     #[test]
     fn test_doc() {
-        let col_doc = ColumnDoc::new("test".to_string(), Some("comment".to_string()));
-        assert_eq!(&col_doc.to_string(), &"Column Name: test\nColumn Doc: comment\n".to_string());
-        let col_doc_no_doc = ColumnDoc::new("test".to_string(), None);
+        let col_doc = ColumnDoc::new("test".to_owned(), Some("comment".to_owned()));
+        assert_eq!(&col_doc.to_string(), &"Column Name: test\nColumn Doc: comment\n".to_owned());
+        let col_doc_no_doc = ColumnDoc::new("test".to_owned(), None);
         assert_eq!(
             &col_doc_no_doc.to_string(),
-            &"Column Name: test\nNo Column Doc Found\n".to_string()
+            &"Column Name: test\nNo Column Doc Found\n".to_owned()
         );
         assert_eq!(col_doc.doc(), Some("comment"));
         assert_eq!(col_doc.name(), "test");
         assert_eq!(col_doc_no_doc.doc(), None);
         assert_eq!(col_doc_no_doc.name(), "test");
         let table_doc = TableDoc::new(
-            Some("schema".to_string()),
-            "table".to_string(),
-            Some("table doc".to_string()),
+            Some("schema".to_owned()),
+            "table".to_owned(),
+            Some("table doc".to_owned()),
             vec![col_doc],
             None,
         );
         let table_doc_no_doc =
-            TableDoc::new(None, "table".to_string(), None, vec![col_doc_no_doc], None);
+            TableDoc::new(None, "table".to_owned(), None, vec![col_doc_no_doc], None);
         assert_eq!(table_doc.name(), "table");
         assert_eq!(table_doc.schema(), Some("schema"));
         assert_eq!(
@@ -665,7 +659,7 @@ CREATE TABLE posts (
     }
 
     fn ident(v: &str) -> Ident {
-        Ident { value: v.to_string(), quote_style: None, span: Span::empty() }
+        Ident { value: v.to_owned(), quote_style: None, span: Span::empty() }
     }
 
     fn func_part(name: &str) -> ObjectNamePart {
@@ -713,7 +707,7 @@ CREATE TABLE posts (
         ]);
 
         let (schema, table) = schema_and_table(&name)?;
-        assert_eq!(schema, Some("public".to_string()));
+        assert_eq!(schema, Some("public".to_owned()));
         assert_eq!(table, "orders");
         Ok(())
     }
@@ -785,7 +779,7 @@ CREATE TABLE posts (
 
     #[test]
     fn column_doc_set_doc_updates_doc() {
-        let mut col = ColumnDoc::new("id".to_string(), None);
+        let mut col = ColumnDoc::new("id".to_owned(), None);
         assert_eq!(col.name(), "id");
         assert_eq!(col.doc(), None);
         col.set_doc("primary key");
@@ -797,7 +791,7 @@ CREATE TABLE posts (
 
     #[test]
     fn table_doc_set_doc_updates_doc() {
-        let mut table = TableDoc::new(None, "users".to_string(), None, Vec::new(), None);
+        let mut table = TableDoc::new(None, "users".to_owned(), None, Vec::new(), None);
         assert_eq!(table.name(), "users");
         assert_eq!(table.schema(), None);
         assert_eq!(table.doc(), None);
@@ -811,11 +805,11 @@ CREATE TABLE posts (
     fn columns_mut_allows_mutating_column_docs() {
         let mut table = TableDoc::new(
             None,
-            "users".to_string(),
+            "users".to_owned(),
             None,
             vec![
-                ColumnDoc::new("id".to_string(), None),
-                ColumnDoc::new("username".to_string(), None),
+                ColumnDoc::new("id".to_owned(), None),
+                ColumnDoc::new("username".to_owned(), None),
             ],
             None,
         );
@@ -837,16 +831,16 @@ CREATE TABLE posts (
     fn test_from_sql_file_doc_into_vec_table_doc_preserves_contents_and_order() {
         let t1 = TableDoc::new(
             None,
-            "users".to_string(),
-            Some("users doc".to_string()),
-            vec![ColumnDoc::new("id".to_string(), Some("pk".to_string()))],
+            "users".to_owned(),
+            Some("users doc".to_owned()),
+            vec![ColumnDoc::new("id".to_owned(), Some("pk".to_owned()))],
             None,
         );
         let t2 = TableDoc::new(
-            Some("analytics".to_string()),
-            "events".to_string(),
+            Some("analytics".to_owned()),
+            "events".to_owned(),
             None,
-            vec![ColumnDoc::new("payload".to_string(), None)],
+            vec![ColumnDoc::new("payload".to_owned(), None)],
             None,
         );
 
@@ -858,7 +852,7 @@ CREATE TABLE posts (
     }
     #[test]
     fn table_doc_path_getter_returns_expected_value() {
-        let mut table = TableDoc::new(None, "users".to_string(), None, Vec::new(), None);
+        let mut table = TableDoc::new(None, "users".to_owned(), None, Vec::new(), None);
         assert_eq!(table.path(), None);
         let pb = PathBuf::from("some/dir/file.sql");
         table.set_path(Some(pb.clone()));

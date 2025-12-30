@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// A list of SQL files that should be excluded from processing.
+/// A list of SQL files to exclude from processing.
 ///
 /// Entries in the deny list are treated as full [`PathBuf`] paths.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -36,8 +36,8 @@ pub struct SqlFilesList {
 }
 
 impl SqlFilesList {
-    /// Creates a list of `.sql` files under `path`, optionally excluding files
-    /// whose full paths appear in `deny_list`.
+    /// Creates a list of `.sql` files under `path`, and optionally excludes files
+    /// that are in the `deny_list`.
     ///
     /// Deny entries must match the discovered full path exactly (string equality on
     /// the resulting [`PathBuf`]).
@@ -82,14 +82,7 @@ impl From<SqlFilesList> for Vec<PathBuf> {
     }
 }
 
-/// Recursively scans the directory for `.sql` files.
-///
-/// This function:
-/// - Walks subdirectories
-/// - Collects *only* `.sql` files
-/// - Returns paths in discovery order
-///
-/// This does **not** load file contents. See [`SqlFile`] for that.
+/// Adds `.sql` files to a Vec of [`PathBuf`] recursively.
 fn recursive_dir_scan(path: &Path) -> io::Result<Vec<PathBuf>> {
     let mut sql_files = Vec::new();
     for entry in fs::read_dir(path)? {
@@ -105,7 +98,7 @@ fn recursive_dir_scan(path: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(sql_files)
 }
 
-/// A single `.sql` file and its loaded contents.
+/// Struct for holding the content of one `.sql`
 #[derive(Debug)]
 pub struct SqlFile {
     path: Option<PathBuf>,
@@ -114,8 +107,6 @@ pub struct SqlFile {
 
 impl SqlFile {
     /// Loads a [`SqlFile`] from the given path.
-    ///
-    /// This reads the entire file contents into memory as a [`String`].
     ///
     /// # Errors
     ///
@@ -149,7 +140,7 @@ impl SqlFile {
     }
 }
 
-/// A loaded set of `.sql` files, including their contents.
+/// A set of [`SqlFile`]
 #[derive(Debug)]
 pub struct SqlFileSet {
     files_contents: Vec<SqlFile>,
@@ -374,7 +365,7 @@ mod tests {
     }
     #[test]
     fn test_sql_file_new_from_str_has_no_path_and_preserves_content() {
-        let sql = "SELECT * FROM users;".to_string();
+        let sql = "SELECT * FROM users;".to_owned();
         let file = SqlFile::new_from_str(sql.clone());
         assert!(file.path().is_none());
         assert!(file.path_into_path_buf().is_none());

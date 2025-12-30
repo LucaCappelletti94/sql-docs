@@ -143,7 +143,7 @@ impl Comment {
 }
 
 /// Enum for returning errors withe Comment parsing
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CommentError {
     /// Found a multiline comment terminator `*/` without a matching opener `/*`
     UnmatchedMultilineCommentStart {
@@ -294,8 +294,8 @@ impl Comments {
                                 .lines()
                                 .enumerate()
                                 .map(|(i, line)| match i {
-                                    0 => line.trim().to_string(),
-                                    _ => "\n".to_string() + line.trim(),
+                                    0 => line.trim().to_owned(),
+                                    _ => "\n".to_owned() + line.trim(),
                                 })
                                 .collect();
                             comments.push(Comment::new(
@@ -326,7 +326,7 @@ impl Comments {
                 in_single = false;
                 let end_loc = Location::new(line_num, col);
                 comments.push(Comment::new(
-                    CommentKind::SingleLine(buf.trim().to_string()),
+                    CommentKind::SingleLine(buf.trim().to_owned()),
                     Span::new(Location { line: start_line, column: start_col }, end_loc),
                 ));
                 buf.clear();
@@ -398,7 +398,7 @@ mod tests {
         let raw_comment = "-- a comment";
         let len = raw_comment.len() as u64;
 
-        let singleline = CommentKind::SingleLine(raw_comment.to_string());
+        let singleline = CommentKind::SingleLine(raw_comment.to_owned());
         let mut span = Span::default();
         span.end.column = len - 1;
 
@@ -414,7 +414,7 @@ mod tests {
 
     #[test]
     fn multiline_comment_span() {
-        let kind = CommentKind::MultiLine("/* hello world */".to_string());
+        let kind = CommentKind::MultiLine("/* hello world */".to_owned());
         let span = Span::new(Location { line: 1, column: 1 }, Location { line: 2, column: 9 });
 
         let comment = Comment::new(kind.clone(), span);
@@ -760,11 +760,11 @@ CREATE TABLE posts (
     fn test_comments() {
         let comment_vec = vec![
             Comment::new(
-                CommentKind::SingleLine("a comment".to_string()),
+                CommentKind::SingleLine("a comment".to_owned()),
                 Span { start: Location::new(1, 1), end: Location::new(1, 12) },
             ),
             Comment::new(
-                CommentKind::SingleLine("a second comment".to_string()),
+                CommentKind::SingleLine("a second comment".to_owned()),
                 Span { start: Location::new(1, 1), end: Location::new(2, 19) },
             ),
         ];
