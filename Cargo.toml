@@ -1,6 +1,6 @@
 [package]
 name = "sql_docs"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2024"
 description = "A crate for parsing comments from sql files and using them for documentation generation"
 documentation = "https://docs.rs/sql_docs"
@@ -22,7 +22,7 @@ default = []
 fuzzing = []
 
 [dependencies]
-sqlparser = "0.59.0"
+sqlparser = "0.60.0"
 
 
 [lints.rust]
