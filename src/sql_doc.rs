@@ -1,6 +1,9 @@
 //! Public entry point for building [`SqlDoc`] from a directory, file, or string.
 
-use std::{path::{Path, PathBuf}, str::FromStr};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use crate::{
     ast::ParsedSqlFile,
@@ -44,6 +47,7 @@ pub enum MultiFlatten {
 enum SqlFileDocSource<'a> {
     Dir(PathBuf),
     File(PathBuf),
+    Files(Vec<PathBuf>),
     FromString(&'a str),
 }
 
@@ -54,7 +58,7 @@ impl SqlDoc {
         Self { tables }
     }
     /// Method for generating builder from a directory.
-    pub fn from_dir<P: AsRef<Path> + ?Sized>(root: &P) -> SqlDocBuilder<'_> {
+    pub fn from_dir<P: AsRef<Path>>(root: &P) -> SqlDocBuilder<'_> {
         SqlDocBuilder {
             source: SqlFileDocSource::Dir(root.as_ref().to_path_buf()),
             deny: Vec::new(),
@@ -65,6 +69,17 @@ impl SqlDoc {
     pub fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> SqlDocBuilder<'_> {
         SqlDocBuilder {
             source: SqlFileDocSource::File(path.as_ref().to_path_buf()),
+            deny: Vec::new(),
+            multiline_flat: MultiFlatten::NoFlat,
+        }
+    }
+
+    /// Method for generating builder from a [`[Path]`]
+    pub fn from_paths<P: AsRef<Path>>(paths: &[P]) -> SqlDocBuilder<'_> {
+        SqlDocBuilder {
+            source: SqlFileDocSource::Files(
+                paths.iter().map(|p| p.as_ref().to_path_buf()).collect(),
+            ),
             deny: Vec::new(),
             multiline_flat: MultiFlatten::NoFlat,
         }
@@ -148,7 +163,7 @@ impl FromStr for SqlDoc {
     type Err = DocError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        SqlDoc::builder_from_str(s).build()
+        Self::builder_from_str(s).build()
     }
 }
 
@@ -200,6 +215,7 @@ impl SqlDocBuilder<'_> {
                 let sql_docs = generate_docs_str(content)?;
                 vec![sql_docs]
             }
+            SqlFileDocSource::Files(files) => generate_docs_from_files(files)?,
         };
         let num_of_tables = docs.iter().map(super::docs::SqlFileDoc::number_of_tables).sum();
         let mut tables = Vec::with_capacity(num_of_tables);
@@ -257,6 +273,15 @@ fn generate_docs_from_dir<P: AsRef<Path>, S: AsRef<str>>(
     let file_set = SqlFilesList::new(source, &deny_list)?;
     let mut sql_docs = Vec::new();
     for file in file_set.sql_files_sorted() {
+        let docs = generate_docs_from_file(file)?;
+        sql_docs.push(docs);
+    }
+    Ok(sql_docs)
+}
+
+fn generate_docs_from_files(files: &[PathBuf]) -> Result<Vec<SqlFileDoc>, DocError> {
+    let mut sql_docs = Vec::new();
+    for file in files {
         let docs = generate_docs_from_file(file)?;
         sql_docs.push(docs);
     }
@@ -695,10 +720,48 @@ mod tests {
     }
 
     #[test]
-fn test_fromstr_parse_sql_doc() -> Result<(), Box<dyn std::error::Error>> {
-    let doc: SqlDoc = "CREATE TABLE t(id INTEGER);".parse()?;
-    assert_eq!(doc.tables().len(), 1);
-    Ok(())
-}
+    fn test_fromstr_parse_sql_doc() -> Result<(), Box<dyn std::error::Error>> {
+        let doc: SqlDoc = "CREATE TABLE t(id INTEGER);".parse()?;
+        assert_eq!(doc.tables().len(), 1);
+        Ok(())
+    }
 
+    #[test]
+    fn test_build_sql_doc_from_paths() -> Result<(), Box<dyn std::error::Error>> {
+        let base = env::temp_dir().join("build_sql_doc_from_paths");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base)?;
+        let sample = sample_sql();
+        let (sql1, doc1) = &sample[0];
+        let (sql2, doc2) = &sample[1];
+
+        let file1 = base.join("one.sql");
+        let file2 = base.join("two.sql");
+        fs::write(&file1, sql1)?;
+        fs::write(&file2, sql2)?;
+
+        let paths = vec![file1.clone(), file2.clone()];
+        let sql_doc = SqlDoc::from_paths(&paths).build()?;
+
+        let mut expected_tables: Vec<TableDoc> = Vec::new();
+
+        let mut t1 = doc1.clone().into_tables();
+        stamp_table_paths(&mut t1, &file1);
+        expected_tables.extend(t1);
+
+        let mut t2 = doc2.clone().into_tables();
+        stamp_table_paths(&mut t2, &file2);
+        expected_tables.extend(t2);
+
+        let mut actual_tables = sql_doc.into_tables();
+        assert_eq!(actual_tables.len(), expected_tables.len());
+
+        sort_tables(&mut actual_tables);
+        sort_tables(&mut expected_tables);
+
+        assert_eq!(actual_tables, expected_tables);
+
+        let _ = fs::remove_dir_all(&base);
+        Ok(())
+    }
 }
