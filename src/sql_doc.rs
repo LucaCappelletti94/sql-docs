@@ -1,6 +1,6 @@
 //! Public entry point for building [`SqlDoc`] from a directory, file, or string.
 
-use std::path::{Path, PathBuf};
+use std::{path::{Path, PathBuf}, str::FromStr};
 
 use crate::{
     ast::ParsedSqlFile,
@@ -72,7 +72,7 @@ impl SqlDoc {
 
     /// Creates a builder from SQL text (no filesystem path is associated) from a [`str`]
     #[must_use]
-    pub const fn from_str(content: &str) -> SqlDocBuilder<'_> {
+    pub const fn builder_from_str(content: &str) -> SqlDocBuilder<'_> {
         SqlDocBuilder {
             source: SqlFileDocSource::FromString(content),
             deny: Vec::new(),
@@ -141,6 +141,14 @@ impl SqlDoc {
     #[must_use]
     pub fn into_tables(self) -> Vec<TableDoc> {
         self.tables
+    }
+}
+
+impl FromStr for SqlDoc {
+    type Err = DocError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        SqlDoc::builder_from_str(s).build()
     }
 }
 
@@ -675,7 +683,7 @@ mod tests {
     fn test_sql_doc_from_str_builds_expected_builder() {
         let content = "CREATE TABLE t(id INTEGER);";
 
-        let actual = SqlDoc::from_str(content);
+        let actual = SqlDoc::builder_from_str(content);
 
         let expected = SqlDocBuilder {
             source: crate::sql_doc::SqlFileDocSource::FromString(content),
@@ -685,4 +693,12 @@ mod tests {
 
         assert_eq!(actual, expected);
     }
+
+    #[test]
+fn test_fromstr_parse_sql_doc() -> Result<(), Box<dyn std::error::Error>> {
+    let doc: SqlDoc = "CREATE TABLE t(id INTEGER);".parse()?;
+    assert_eq!(doc.tables().len(), 1);
+    Ok(())
+}
+
 }
