@@ -21,7 +21,7 @@ impl ColumnDoc {
     /// - name: `String` - the name of the column
     /// - doc: `Option<String>` the comment for the column
     #[must_use]
-    pub fn new(name: String, doc: Option<String>) -> Self {
+    pub const fn new(name: String, doc: Option<String>) -> Self {
         Self { name, doc }
     }
 
@@ -134,7 +134,10 @@ impl TableDoc {
     /// # Errors
     /// - Will return [`DocError::ColumnNotFound`] if the expected table is not found
     pub fn column(&self, name: &str) -> Result<&ColumnDoc, DocError> {
-        self.columns().binary_search_by(|c| c.name().cmp(name)).map_or_else(|_| Err(DocError::ColumnNotFound { name: name.to_owned() }), |id| Ok(&self.columns()[id]))
+        self.columns().binary_search_by(|c| c.name().cmp(name)).map_or_else(
+            |_| Err(DocError::ColumnNotFound { name: name.to_owned() }),
+            |id| Ok(&self.columns()[id]),
+        )
     }
 
     /// Getter method for retrieving the table's [`Path`]
