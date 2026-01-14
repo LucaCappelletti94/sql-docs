@@ -68,7 +68,7 @@ pub struct TableDoc {
 }
 
 impl TableDoc {
-    /// Creates a new [`TableDoc`] after sorting [`ColumnDoc`] by name
+    /// Creates a new [`TableDoc`] after sorting [`ColumnDoc`] by `name`
     ///
     /// # Parameters
     /// - name: `String` - the name of the table
@@ -83,7 +83,7 @@ impl TableDoc {
         mut columns: Vec<ColumnDoc>,
         path: Option<PathBuf>,
     ) -> Self {
-        columns.sort_by(|a,b| a.name().cmp(b.name()));
+        columns.sort_by(|a, b| a.name().cmp(b.name()));
         Self { schema, name, doc, columns, path }
     }
 
@@ -649,35 +649,41 @@ CREATE TABLE posts (
     fn test_doc() {
         let col_doc = ColumnDoc::new("test".to_owned(), Some("comment".to_owned()));
         assert_eq!(&col_doc.to_string(), &"Column Name: test\nColumn Doc: comment\n".to_owned());
-        let col_doc_no_doc = ColumnDoc::new("test".to_owned(), None);
+        let col_doc_no_doc = ColumnDoc::new("id".to_owned(), None);
         assert_eq!(
             &col_doc_no_doc.to_string(),
-            &"Column Name: test\nNo Column Doc Found\n".to_owned()
+            &"Column Name: id\nNo Column Doc Found\n".to_owned()
         );
         assert_eq!(col_doc.doc(), Some("comment"));
         assert_eq!(col_doc.name(), "test");
         assert_eq!(col_doc_no_doc.doc(), None);
-        assert_eq!(col_doc_no_doc.name(), "test");
+        assert_eq!(col_doc_no_doc.name(), "id");
         let table_doc = TableDoc::new(
             Some("schema".to_owned()),
             "table".to_owned(),
             Some("table doc".to_owned()),
-            vec![col_doc],
+            vec![col_doc.clone(), col_doc_no_doc.clone()],
             None,
         );
-        let table_doc_no_doc =
-            TableDoc::new(None, "table".to_owned(), None, vec![col_doc_no_doc], None);
+        let last_col = ColumnDoc::new("zed".to_owned(), Some("the last column".to_owned()));
+        let table_doc_no_doc = TableDoc::new(
+            None,
+            "table".to_owned(),
+            None,
+            vec![last_col, col_doc, col_doc_no_doc],
+            None,
+        );
         assert_eq!(table_doc.name(), "table");
         assert_eq!(table_doc.schema(), Some("schema"));
         assert_eq!(
             table_doc.to_string(),
-            "Table Schema: schema\nTable Name: table\nTable Doc: table doc\nTable Column Docs: \n Column Name: test\nColumn Doc: comment\n"
+            "Table Schema: schema\nTable Name: table\nTable Doc: table doc\nTable Column Docs: \n Column Name: id\nNo Column Doc Found\n Column Name: test\nColumn Doc: comment\n"
         );
         assert_eq!(table_doc_no_doc.schema(), None);
         assert_eq!(table_doc_no_doc.name(), "table");
         assert_eq!(
             table_doc_no_doc.to_string(),
-            "No Table Schema\nTable Name: table\nNo Table Doc\nTable Column Docs: \n Column Name: test\nNo Column Doc Found\n"
+            "No Table Schema\nTable Name: table\nNo Table Doc\nTable Column Docs: \n Column Name: id\nNo Column Doc Found\n Column Name: test\nColumn Doc: comment\n Column Name: zed\nColumn Doc: the last column\n"
         );
     }
 
@@ -770,7 +776,7 @@ CREATE TABLE posts (
     }
 
     #[test]
-    fn display_propagates_every_question_mark_path_for_column_and_table() {
+    fn test_display_propagates_every_question_mark_path_for_column_and_table() {
         let col_with_doc = ColumnDoc::new("col_a".into(), Some("doc".into()));
         let col_without_doc = ColumnDoc::new("col_b".into(), None);
 

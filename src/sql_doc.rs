@@ -54,9 +54,11 @@ enum SqlFileDocSource<'a> {
 impl SqlDoc {
     /// Method for creating a new [`SqlDoc`]
     #[must_use]
-    pub const fn new(tables: Vec<TableDoc>) -> Self {
+    pub fn new(mut tables: Vec<TableDoc>) -> Self {
+        tables.sort_by(|a, b| a.name().cmp(b.name()));
         Self { tables }
     }
+
     /// Method for generating builder from a directory.
     pub fn from_dir<P: AsRef<Path>>(root: &P) -> SqlDocBuilder<'_> {
         SqlDocBuilder {
@@ -102,20 +104,11 @@ impl SqlDoc {
     ///
     /// # Errors
     /// - Will return [`DocError::TableNotFound`] if the expected table is not found
-    /// - Will return [`DocError::DuplicateTablesFound`] if more than one table is found
-    pub fn table(&self, table: &str) -> Result<&TableDoc, DocError> {
-        let matches = self
-            .tables
-            .iter()
-            .filter(|table_doc| table_doc.name() == table)
-            .collect::<Vec<&TableDoc>>();
-        match matches.as_slice() {
-            [] => Err(DocError::TableNotFound { name: table.to_owned() }),
-            [only] => Ok(*only),
-            _ => Err(DocError::DuplicateTablesFound {
-                tables: matches.into_iter().cloned().collect(),
-            }),
-        }
+    pub fn table(&self, name: &str) -> Result<&TableDoc, DocError> {
+        self.tables().binary_search_by(|t| t.name().cmp(name)).map_or_else(
+            |_| Err(DocError::TableNotFound { name: name.to_owned() }),
+            |id| Ok(&self.tables()[id]),
+        )
     }
 
     /// Method for finding a specific [`TableDoc`] from `schema` and table `name`
@@ -222,7 +215,7 @@ impl SqlDocBuilder<'_> {
         for sql_doc in docs {
             tables.extend(sql_doc);
         }
-        let mut sql_doc = SqlDoc { tables };
+        let mut sql_doc = SqlDoc::new(tables);
         match self.multiline_flat {
             MultiFlatten::FlattenWithNone => {
                 sql_doc = flatten_docs(sql_doc, None);
@@ -334,6 +327,11 @@ mod tests {
         stamp_table_paths(&mut expected_tables, &file);
         let expected_doc = SqlDoc::new(expected_tables);
         assert_eq!(sql_doc, expected_doc);
+        let names: Vec<&str> =
+            sql_doc.tables().iter().map(super::super::docs::TableDoc::name).collect();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        assert_eq!(names, sorted, "tables should be in alphabetical order");
         let _ = fs::remove_dir_all(&base);
         Ok(())
     }
@@ -396,12 +394,6 @@ mod tests {
             empty_table_err,
             Err(DocError::TableNotFound { name }) if name == "name"
         ));
-        let duplicate_set = SqlDoc::new(vec![
-            TableDoc::new(None, "duplicate".to_owned(), None, vec![], None),
-            TableDoc::new(None, "duplicate".to_owned(), None, vec![], None),
-        ]);
-        let duplicate_tables_err = duplicate_set.table("duplicate");
-        assert!(matches!(duplicate_tables_err, Err(DocError::DuplicateTablesFound { .. })));
     }
 
     #[test]
@@ -720,7 +712,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fromstr_parse_sql_doc() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_from_str_parse_sql_doc() -> Result<(), Box<dyn std::error::Error>> {
         let doc: SqlDoc = "CREATE TABLE t(id INTEGER);".parse()?;
         assert_eq!(doc.tables().len(), 1);
         Ok(())
@@ -763,5 +755,18 @@ mod tests {
 
         let _ = fs::remove_dir_all(&base);
         Ok(())
+    }
+
+    #[test]
+    fn test_tables_binary_searchable_by_name() {
+        let sample = sample_sql();
+        let tables: Vec<TableDoc> =
+            sample.into_iter().flat_map(|(_, doc)| doc.into_tables()).collect();
+        let sql_doc = SqlDoc::new(tables);
+        let id = sql_doc
+            .tables()
+            .binary_search_by(|t| t.name().cmp("users"))
+            .unwrap_or_else(|_| panic!("expected to find table `users` via binary search"));
+        assert_eq!(sql_doc.tables()[id].name(), "users");
     }
 }
