@@ -139,30 +139,6 @@ impl SqlDoc {
         }
     }
 
-    /// Method for finding a specific [`TableDoc`] from `schema` and table `name`
-    ///
-    /// # Parameters
-    /// - the table's `schema` as a [`str`]
-    /// - the table's `name` as a [`str`]
-    ///
-    /// # Errors
-    /// - Will return [`DocError::TableNotFound`] if the expected table is not found
-    /// - Will return [`DocError::DuplicateTablesFound`] if more than one table is found
-    pub fn table_with_schema(&self, schema: &str, name: &str) -> Result<&TableDoc, DocError> {
-        let matches = self
-            .tables
-            .iter()
-            .filter(|table_doc| table_doc.name() == name && table_doc.schema() == Some(schema))
-            .collect::<Vec<&TableDoc>>();
-        match matches.as_slice() {
-            [] => Err(DocError::TableNotFound { name: name.to_owned() }),
-            [only] => Ok(*only),
-            _ => Err(DocError::DuplicateTablesFound {
-                tables: matches.into_iter().cloned().collect(),
-            }),
-        }
-    }
-
     /// Getter method for returning the `&[TableDoc]`
     #[must_use]
     pub fn tables(&self) -> &[TableDoc] {
@@ -406,8 +382,8 @@ mod tests {
         let schema = "analytics";
         let schema_table = "events";
         assert_eq!(
-            sql_doc.table_with_schema(schema, schema_table)?,
-            expected_doc.table_with_schema(schema, schema_table)?
+            sql_doc.table(schema_table, Some(schema))?,
+            expected_doc.table(schema_table, Some(schema))?
         );
         let _ = fs::remove_dir_all(&base);
         Ok(())
@@ -427,7 +403,7 @@ mod tests {
     #[test]
     fn test_schema_err() {
         let empty_set = SqlDoc::new(vec![]);
-        let empty_table_err = empty_set.table_with_schema("schema", "name");
+        let empty_table_err = empty_set.table("name", Some("schema"));
         assert!(empty_table_err.is_err());
         assert!(matches!(
             empty_table_err,
@@ -437,7 +413,7 @@ mod tests {
             TableDoc::new(Some("schema".to_owned()), "duplicate".to_owned(), None, vec![], None),
             TableDoc::new(Some("schema".to_owned()), "duplicate".to_owned(), None, vec![], None),
         ]);
-        let duplicate_tables_err = duplicate_set.table_with_schema("schema", "duplicate");
+        let duplicate_tables_err = duplicate_set.table("duplicate", Some("schema"));
         assert!(matches!(duplicate_tables_err, Err(DocError::DuplicateTablesFound { .. })));
     }
 
