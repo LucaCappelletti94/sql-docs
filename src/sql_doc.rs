@@ -101,14 +101,42 @@ impl SqlDoc {
     ///
     /// # Parameters
     /// - the table `name` as a [`str`]
+    /// - the table schema as `Option` of [`str`]
     ///
     /// # Errors
     /// - Will return [`DocError::TableNotFound`] if the expected table is not found
-    pub fn table(&self, name: &str) -> Result<&TableDoc, DocError> {
-        self.tables().binary_search_by(|t| t.name().cmp(name)).map_or_else(
-            |_| Err(DocError::TableNotFound { name: name.to_owned() }),
-            |id| Ok(&self.tables()[id]),
-        )
+    /// - Will return [`DocError::TableWithSchemaNotFound`] if the table name exists but no table matches the given schema
+    /// - Will return [`DocError::DuplicateTablesFound`] if more than one matching table is found
+    pub fn table(&self, name: &str, schema: Option<&str>) -> Result<&TableDoc, DocError> {
+        let tables = self.tables();
+        let start = tables.partition_point(|n| n.name() < name);
+        if start == tables.len() || tables[start].name() != name {
+            return Err(DocError::TableNotFound { name: name.to_owned() });
+        }
+        let end = tables.partition_point(|t| t.name() <= name);
+        match &tables[start..end] {
+            [single] => Ok(single),
+            multiple => {
+                let mut schemas = multiple.iter().filter(|v| v.schema() == schema);
+                let first = schemas.next().ok_or_else(|| DocError::TableWithSchemaNotFound {
+                    name: name.to_owned(),
+                    schema: schema.map_or_else(
+                        || "No schema provided".to_owned(),
+                        std::borrow::ToOwned::to_owned,
+                    ),
+                })?;
+                if schemas.next().is_some() {
+                    return Err(DocError::DuplicateTablesFound {
+                        tables: multiple
+                            .iter()
+                            .filter(|v| v.schema() == schema)
+                            .map(std::borrow::ToOwned::to_owned)
+                            .collect(),
+                    });
+                }
+                Ok(first)
+            }
+        }
     }
 
     /// Method for finding a specific [`TableDoc`] from `schema` and table `name`
@@ -374,7 +402,7 @@ mod tests {
         let expected_doc = SqlDoc::new(expected_tables);
         assert_eq!(sql_doc, expected_doc);
         let table = "users";
-        assert_eq!(sql_doc.table(table)?, expected_doc.table(table)?);
+        assert_eq!(sql_doc.table(table, None)?, expected_doc.table(table, None)?);
         let schema = "analytics";
         let schema_table = "events";
         assert_eq!(
@@ -388,7 +416,7 @@ mod tests {
     #[test]
     fn test_table_err() {
         let empty_set = SqlDoc::new(vec![]);
-        let empty_table_err = empty_set.table("name");
+        let empty_table_err = empty_set.table("name", None);
         assert!(empty_table_err.is_err());
         assert!(matches!(
             empty_table_err,
@@ -768,5 +796,47 @@ mod tests {
             .binary_search_by(|t| t.name().cmp("users"))
             .unwrap_or_else(|_| panic!("expected to find table `users` via binary search"));
         assert_eq!(sql_doc.tables()[id].name(), "users");
+    }
+
+    #[test]
+    fn test_table_with_schema_not_found_when_name_exists() {
+        let sql_doc = SqlDoc::new(vec![
+            TableDoc::new(Some("analytics".to_owned()), "events".to_owned(), None, vec![], None),
+            TableDoc::new(Some("public".to_owned()), "events".to_owned(), None, vec![], None),
+        ]);
+
+        match sql_doc.table("events", Some("missing")) {
+            Err(DocError::TableWithSchemaNotFound { name, schema })
+                if name == "events" && schema == "missing" => {}
+            Err(e) => panic!("expected TableWithSchemaNotFound(events, missing), got: {e:?}"),
+            Ok(_) => panic!("expected error, got Ok"),
+        }
+    }
+
+    #[test]
+    fn test_table_duplicate_tables_found_for_same_name_and_schema() {
+        let sql_doc = SqlDoc::new(vec![
+            TableDoc::new(Some("analytics".to_owned()), "events".to_owned(), None, vec![], None),
+            TableDoc::new(Some("analytics".to_owned()), "events".to_owned(), None, vec![], None),
+        ]);
+
+        match sql_doc.table("events", Some("analytics")) {
+            Err(DocError::DuplicateTablesFound { .. }) => {}
+            Err(e) => panic!("expected DuplicateTablesFound, got: {e:?}"),
+            Ok(_) => panic!("expected error, got Ok"),
+        }
+    }
+
+    #[test]
+    fn test_table_selects_correct_schema_when_multiple_exist()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let sql_doc = SqlDoc::new(vec![
+            TableDoc::new(Some("analytics".to_owned()), "events".to_owned(), None, vec![], None),
+            TableDoc::new(Some("public".to_owned()), "events".to_owned(), None, vec![], None),
+        ]);
+
+        let t = sql_doc.table("events", Some("public"))?;
+        assert_eq!(t.schema(), Some("public"));
+        Ok(())
     }
 }

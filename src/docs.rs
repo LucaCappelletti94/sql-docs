@@ -133,11 +133,18 @@ impl TableDoc {
     ///
     /// # Errors
     /// - Will return [`DocError::ColumnNotFound`] if the expected table is not found
+    /// - Will return [`DocError::DuplicateColumnsFound`] if more than one column matches
     pub fn column(&self, name: &str) -> Result<&ColumnDoc, DocError> {
-        self.columns().binary_search_by(|c| c.name().cmp(name)).map_or_else(
-            |_| Err(DocError::ColumnNotFound { name: name.to_owned() }),
-            |id| Ok(&self.columns()[id]),
-        )
+        let columns = self.columns();
+        let start = columns.partition_point(|n| n.name() < name);
+        if start == columns.len() || columns[start].name() != name {
+            return Err(DocError::ColumnNotFound { name: name.to_owned() });
+        }
+        let end = columns.partition_point(|n| n.name() <= name);
+        match &columns[start..end] {
+            [single] => Ok(single),
+            multiple => Err(DocError::DuplicateColumnsFound { columns: multiple.to_vec() }),
+        }
     }
 
     /// Getter method for retrieving the table's [`Path`]

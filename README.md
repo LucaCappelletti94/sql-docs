@@ -64,7 +64,7 @@ CREATE TABLE users (
     // let docs = SqlDoc::from_dir(&base).build()?;
 
     // Retrieve a specific table
-    let users = docs.table("users")?;
+    let users = docs.table("users", None)?;
 
     // Table name
     assert_eq!(users.name(), "users");

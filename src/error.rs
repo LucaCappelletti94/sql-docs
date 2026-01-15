@@ -47,6 +47,13 @@ pub enum DocError {
         /// `Vec` of the [`crate::docs::ColumnDoc`] for each duplicate table found
         columns: Vec<ColumnDoc>,
     },
+    /// Could not find table with `schema`
+    TableWithSchemaNotFound {
+        /// the name of the table not found
+        name: String,
+        /// the schema for the table not found
+        schema: String,
+    },
 }
 
 impl fmt::Display for DocError {
@@ -76,6 +83,9 @@ impl fmt::Display for DocError {
                 }
                 Ok(())
             }
+            Self::TableWithSchemaNotFound { name, schema } => {
+                writeln!(f, "Table: {name} with schema: {schema} not found in SqlDoc")
+            }
         }
     }
 }
@@ -90,7 +100,8 @@ impl error::Error for DocError {
             | Self::TableNotFound { .. }
             | Self::ColumnNotFound { .. }
             | Self::DuplicateTablesFound { .. }
-            | Self::DuplicateColumnsFound { .. } => None,
+            | Self::DuplicateColumnsFound { .. }
+            | Self::TableWithSchemaNotFound { .. } => None,
         }
     }
 }
@@ -148,31 +159,32 @@ mod tests {
     fn test_doc_errors_from() {
         use crate::comments::Location;
         use std::fs;
+
         let Err(io_error) = fs::read_dir("INVALID") else {
             panic!("there should not be a directory called INVALID")
         };
         let io_kind = io_error.kind();
-        let doc_io_error = DocError::from(io_error);
-        match doc_io_error {
-            DocError::FileReadError(inner) => assert_eq!(inner.kind(), io_kind),
-            _ => panic!("expected instance of DocError::FileReadError"),
+        let doc_io_error: DocError = io_error.into();
+        assert!(matches!(doc_io_error, DocError::FileReadError(_)));
+        if let DocError::FileReadError(inner) = doc_io_error {
+            assert_eq!(inner.kind(), io_kind);
         }
 
         let comment_error =
             CommentError::UnmatchedMultilineCommentStart { location: Location::default() };
         let comment_error_str = comment_error.to_string();
         let doc_comment_error: DocError = comment_error.into();
-        match doc_comment_error {
-            DocError::CommentError(inner) => assert_eq!(inner.to_string(), comment_error_str),
-            _ => panic!("expected instance of DocError::CommentError"),
+        assert!(matches!(doc_comment_error, DocError::CommentError(_)));
+        if let DocError::CommentError(inner) = doc_comment_error {
+            assert_eq!(inner.to_string(), comment_error_str);
         }
 
         let parser_error = ParserError::RecursionLimitExceeded;
         let parser_error_str = parser_error.to_string();
         let doc_parser_error: DocError = parser_error.into();
-        match doc_parser_error {
-            DocError::SqlParserError(inner) => assert_eq!(inner.to_string(), parser_error_str),
-            _ => panic!("expected instance of DocError::SqlParserError"),
+        assert!(matches!(doc_parser_error, DocError::SqlParserError(_)));
+        if let DocError::SqlParserError(inner) = doc_parser_error {
+            assert_eq!(inner.to_string(), parser_error_str);
         }
     }
 
@@ -274,5 +286,24 @@ mod tests {
 
         let dup = DocError::DuplicateColumnsFound { columns: vec![] };
         assert!(dup.source().is_none());
+    }
+
+    #[test]
+    fn test_doc_error_display_table_with_schema_not_found() {
+        let e = DocError::TableWithSchemaNotFound {
+            name: "events".to_string(),
+            schema: "analytics".to_string(),
+        };
+        assert_eq!(e.to_string(), "Table: events with schema: analytics not found in SqlDoc\n");
+    }
+
+    #[test]
+    fn test_doc_error_source_none_for_table_with_schema_not_found() {
+        use std::error::Error as _;
+        let e = DocError::TableWithSchemaNotFound {
+            name: "events".to_string(),
+            schema: "analytics".to_string(),
+        };
+        assert!(e.source().is_none());
     }
 }
