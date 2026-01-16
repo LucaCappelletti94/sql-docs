@@ -168,6 +168,12 @@ impl SqlDoc {
     pub fn into_tables(self) -> Vec<TableDoc> {
         self.tables
     }
+
+    /// Returns the number of [`TableDoc`]
+    #[must_use]
+    pub fn number_of_tables(&self) -> usize {
+        self.tables().len()
+    }
 }
 
 impl FromStr for SqlDoc {
@@ -551,7 +557,7 @@ mod tests {
     fn test_sql_doc_getters() {
         let tables = vec![TableDoc::new(None, "name".to_owned(), None, vec![], None)];
         let sql_doc = SqlDoc::new(vec![TableDoc::new(None, "name".to_owned(), None, vec![], None)]);
-        assert_eq!(sql_doc.tables().len(), 1);
+        assert_eq!(sql_doc.number_of_tables(), tables.len());
         assert_eq!(sql_doc.tables(), tables);
     }
 

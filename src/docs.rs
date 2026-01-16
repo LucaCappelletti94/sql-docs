@@ -152,6 +152,12 @@ impl TableDoc {
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
     }
+
+    /// Returns the number of [`ColumnDoc`]
+    #[must_use]
+    pub fn number_of_columns(&self) -> usize {
+        self.columns().len()
+    }
 }
 
 impl fmt::Display for TableDoc {
@@ -664,6 +670,7 @@ CREATE TABLE posts (
             vec![col_doc.clone(), col_doc_no_doc.clone()],
             None,
         );
+        assert_eq!(table_doc.number_of_columns(), 2);
         let last_col = ColumnDoc::new("zed".to_owned(), Some("the last column".to_owned()));
         let table_doc_no_doc = TableDoc::new(
             None,
@@ -672,6 +679,7 @@ CREATE TABLE posts (
             vec![last_col, col_doc, col_doc_no_doc],
             None,
         );
+        assert_eq!(table_doc_no_doc.number_of_columns(), 3);
         assert_eq!(table_doc.name(), "table");
         assert_eq!(table_doc.schema(), Some("schema"));
         assert_eq!(
