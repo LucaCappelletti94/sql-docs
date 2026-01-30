@@ -344,15 +344,47 @@ impl Comments {
         &self.comments
     }
 
-    /// Helper method for checking and finding for a comment before a specific
-    /// line
+    /// Finds a single comment before a specific line or returns none
     ///
     /// # Parameters
-    /// - `self` an instance of [`Comments`]
-    /// - `line` an `u64` value representing the desired line to check above.
+    /// - [`Comments`] object
+    /// - An `u64` value representing the desired line to check above.
     #[must_use]
     pub fn leading_comment(&self, line: u64) -> Option<&Comment> {
         self.comments().iter().rev().find(|comment| comment.span().end().line() + 1 == line)
+    }
+
+    /// Finds leading comments before specific line based on [`LeadingCommentCapture`] preference
+    ///
+    /// # Parameters
+    /// - [`Comments`] object
+    /// - An `u64` value representing the desired line to check above.
+    /// - [`LeadingCommentCapture`] preference
+    #[must_use]
+    pub fn leading_comments(&self, line: u64, capture: &LeadingCommentCapture) -> Vec<&Comment> {
+        let mut comments = Vec::new();
+        let mut current_line = line;
+        let mut seen_multiline = false;
+        while let Some(leading_comment) = self.leading_comment(current_line) {
+            match capture {
+                LeadingCommentCapture::SingleNearest => {
+                    comments.push(leading_comment);
+                    break;
+                }
+                LeadingCommentCapture::AllLeading => comments.push(leading_comment),
+                LeadingCommentCapture::AllSingleOneMulti => match leading_comment.kind() {
+                    CommentKind::MultiLine if seen_multiline => break,
+                    CommentKind::MultiLine => {
+                        seen_multiline = true;
+                        comments.push(leading_comment);
+                    }
+                    CommentKind::SingleLine => comments.push(leading_comment),
+                },
+            }
+            current_line = leading_comment.span().start().line();
+        }
+        comments.reverse();
+        comments
     }
 }
 
@@ -780,5 +812,101 @@ CREATE TABLE posts (
             assert_eq!(comment.span().start(), comment_vec[i].span().start());
             assert_eq!(comment.span().end(), comment_vec[i].span().end());
         }
+    }
+
+    use crate::comments::LeadingCommentCapture;
+
+    fn texts(v: Vec<&Comment>) -> Vec<String> {
+        v.into_iter().map(|c| c.text().to_owned()).collect()
+    }
+
+    #[test]
+    fn leading_comment_capture_default_is_single_nearest() {
+        match LeadingCommentCapture::default() {
+            LeadingCommentCapture::SingleNearest => {}
+            _ => panic!("Default for LeadingCommentCapture must be SingleNearest"),
+        }
+    }
+
+    #[test]
+    fn leading_comments_single_nearest_and_all_leading_basic_runover()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let src = "\
+-- c1
+-- c2
+CREATE TABLE t (id INTEGER);
+";
+        let parsed = Comments::scan_comments(src)?;
+        let single = parsed.leading_comments(3, &LeadingCommentCapture::SingleNearest);
+        assert_eq!(texts(single), vec!["c2".to_owned()]);
+
+        let all = parsed.leading_comments(3, &LeadingCommentCapture::AllLeading);
+        assert_eq!(texts(all), vec!["c1".to_owned(), "c2".to_owned()]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn leading_comments_all_leading_stops_at_blank_line() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let src = "\
+-- c1
+
+-- c2
+CREATE TABLE t (id INTEGER);
+";
+        let parsed = Comments::scan_comments(src)?;
+        let all = parsed.leading_comments(4, &LeadingCommentCapture::AllLeading);
+        assert_eq!(texts(all), vec!["c2".to_owned()]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn leading_comments_all_single_one_multi_collects_singles_and_one_multiline()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let src = "\
+/* m
+m */
+-- s1
+-- s2
+CREATE TABLE t (id INTEGER);
+";
+        let parsed = Comments::scan_comments(src)?;
+        let got = parsed.leading_comments(5, &LeadingCommentCapture::AllSingleOneMulti);
+        assert_eq!(texts(got), vec!["m\nm".to_owned(), "s1".to_owned(), "s2".to_owned(),]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn leading_comments_all_single_one_multi_stops_before_second_multiline()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let src = "\
+/* m1 */
+/* m2 */
+-- s1
+CREATE TABLE t (id INTEGER);
+";
+        let parsed = Comments::scan_comments(src)?;
+        let got = parsed.leading_comments(4, &LeadingCommentCapture::AllSingleOneMulti);
+        assert_eq!(texts(got), vec!["m2".to_owned(), "s1".to_owned()]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn leading_comments_single_nearest_can_return_multiline()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let src = "\
+/* hello
+world */
+CREATE TABLE t (id INTEGER);
+";
+        let parsed = Comments::scan_comments(src)?;
+        let got = parsed.leading_comments(3, &LeadingCommentCapture::SingleNearest);
+        assert_eq!(texts(got), vec!["hello\nworld".to_owned()]);
+
+        Ok(())
     }
 }
