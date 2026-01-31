@@ -389,12 +389,17 @@ impl Comments {
 
     /// Collapse this collection of comments and separate each comment with `\n` as a single [`Comment`].
     #[must_use]
-    pub fn collapse_comments(self) -> Option<Comment> {
+    pub fn collapse_comments(self, flatten: MultiFlatten) -> Option<Comment> {
         let mut iter = self.comments.into_iter();
         let first = iter.next()?;
 
         let Some(second) = iter.next() else {
-            return Some(first);
+            let text = first.text();
+            return Some(Comment::new(
+                flatten_lines(text, flatten),
+                first.kind().to_owned(),
+                first.span().to_owned(),
+            ));
         };
 
         let start = *first.span().start();
@@ -411,8 +416,28 @@ impl Comments {
             end = *c.span().end();
         }
 
-        Some(Comment::new(text, CommentKind::MultiLine, Span::new(start, end)))
+        Some(Comment::new(
+            flatten_lines(&text, flatten),
+            CommentKind::MultiLine,
+            Span::new(start, end),
+        ))
     }
+}
+
+fn flatten_lines(lines: &str, flatten: MultiFlatten) -> String {
+    let mut out = String::new();
+    let sep = match flatten {
+        MultiFlatten::FlattenWithNone => String::new(),
+        MultiFlatten::NoFlat => return lines.to_owned(),
+        MultiFlatten::Flatten(chars) => chars.to_owned(),
+    };
+    for (i, line) in lines.lines().enumerate() {
+        if i > 0 {
+            out.push_str(&sep);
+        }
+        out.push_str(line);
+    }
+    out
 }
 
 /// Controls how leading comments are captured for a statement.
@@ -425,6 +450,18 @@ pub enum LeadingCommentCapture {
     AllLeading,
     /// Capture all contiguous single-line or at most one multi-line leading comments.
     AllSingleOneMulti,
+}
+
+/// Enum for multiline comment flattening.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum MultiFlatten<'a> {
+    /// Default option, retains multiline structure with `\n`
+    #[default]
+    NoFlat,
+    /// Sets multiline comments to be flattened and combined without adding formatting
+    FlattenWithNone,
+    /// Will flatten comments and amend the content of [`String`] to the end of the former leading lines
+    Flatten(&'a str),
 }
 
 #[cfg(test)]
@@ -937,7 +974,7 @@ CREATE TABLE t (id INTEGER);
     #[test]
     fn collapse_comments_empty_returns_none() {
         let comments = Comments::new(vec![]);
-        assert!(comments.collapse_comments().is_none());
+        assert!(comments.collapse_comments(crate::comments::MultiFlatten::NoFlat).is_none());
     }
 
     #[test]
@@ -949,8 +986,9 @@ CREATE TABLE t (id INTEGER);
         );
         let comments = Comments::new(vec![c]);
 
-        let collapsed =
-            comments.collapse_comments().unwrap_or_else(|| panic!("should return a comment"));
+        let collapsed = comments
+            .collapse_comments(crate::comments::MultiFlatten::NoFlat)
+            .unwrap_or_else(|| panic!("should return a comment"));
         assert_eq!(collapsed.text(), "solo");
         assert_eq!(collapsed.kind(), &CommentKind::SingleLine);
         assert_eq!(collapsed.span(), &Span::new(Location::new(10, 3), Location::new(10, 11)));
@@ -976,7 +1014,9 @@ CREATE TABLE t (id INTEGER);
 
         let comments = Comments::new(vec![c1, c2, c3]);
 
-        let collapsed = comments.collapse_comments().unwrap_or_else(|| panic!("should collapse"));
+        let collapsed = comments
+            .collapse_comments(crate::comments::MultiFlatten::NoFlat)
+            .unwrap_or_else(|| panic!("should collapse"));
         assert_eq!(collapsed.text(), "a\nb\nc");
         assert_eq!(collapsed.kind(), &CommentKind::MultiLine);
         assert_eq!(collapsed.span(), &Span::new(Location::new(1, 1), Location::new(4, 3)));
@@ -995,7 +1035,9 @@ CREATE TABLE t (id INTEGER);
         let leading = parsed.leading_comments(3, LeadingCommentCapture::AllLeading);
         assert_eq!(texts(&leading), vec!["c1".to_owned(), "c2".to_owned()]);
 
-        let collapsed = leading.collapse_comments().unwrap_or_else(|| panic!("should collapse"));
+        let collapsed = leading
+            .collapse_comments(crate::comments::MultiFlatten::NoFlat)
+            .unwrap_or_else(|| panic!("should collapse"));
         assert_eq!(collapsed.text(), "c1\nc2");
         assert_eq!(collapsed.kind(), &CommentKind::MultiLine);
 
@@ -1018,10 +1060,23 @@ CREATE TABLE t (id INTEGER);
         let leading = parsed.leading_comments(3, LeadingCommentCapture::SingleNearest);
         assert_eq!(texts(&leading), vec!["c2".to_owned()]);
 
-        let collapsed = leading.collapse_comments().unwrap_or_else(|| panic!("should collapse"));
+        let collapsed = leading
+            .collapse_comments(crate::comments::MultiFlatten::NoFlat)
+            .unwrap_or_else(|| panic!("should collapse"));
         assert_eq!(collapsed.text(), "c2");
         assert_eq!(collapsed.kind(), &CommentKind::SingleLine);
 
         Ok(())
+    }
+    use crate::comments::flatten_lines;
+    #[test]
+    fn test_flatten_lines_behavior() {
+        let input = "a\nb\nc";
+        let no_sep = flatten_lines(input, crate::comments::MultiFlatten::FlattenWithNone);
+        assert_eq!(no_sep, "abc");
+        let dash_sep = flatten_lines(input, crate::comments::MultiFlatten::Flatten(" - "));
+        assert_eq!(dash_sep, "a - b - c");
+        let single = flatten_lines("solo", crate::comments::MultiFlatten::Flatten("XXX"));
+        assert_eq!(single, "solo");
     }
 }

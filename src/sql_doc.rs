@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     ast::ParsedSqlFile,
-    comments::{Comments, LeadingCommentCapture},
+    comments::{Comments, LeadingCommentCapture, MultiFlatten},
     docs::{SqlFileDoc, TableDoc},
     error::DocError,
     files::SqlFiles,
@@ -20,41 +20,6 @@ use crate::{
 pub struct SqlDoc {
     /// Holds the [`Vec`] of all tables found in all specified files.
     tables: Vec<TableDoc>,
-}
-
-/// Builder structure for the [`SqlDoc`]
-#[derive(Debug, Eq, PartialEq)]
-pub struct SqlDocBuilder<'a> {
-    /// The source for implementing the [`SqlDoc`] to be built
-    source: SqlFileDocSource<'a>,
-    /// The list of Paths to be ignored for parsing purposes.
-    deny: Vec<String>,
-    /// Tracks the chosen setting for flattening multiline comments
-    multiline_flat: MultiFlatten,
-    /// Tracks the chosen setting for leading comment collection
-    leading_type: LeadingCommentCapture,
-}
-
-/// Enum for multiline comment flattening.
-#[derive(Debug, Default, Eq, PartialEq)]
-pub enum MultiFlatten {
-    /// Default option, retains multiline structure with `\n`
-    #[default]
-    NoFlat,
-    /// Sets multiline comments to be flattened and combined without adding formatting
-    FlattenWithNone,
-    /// Will flatten comments and amend the content of [`String`] to the end of the former leading lines
-    Flatten(String),
-}
-
-/// Enum for specifying a file doc source as a `directory` or a specific `file`
-#[derive(Debug, Eq, PartialEq)]
-enum SqlFileDocSource<'a> {
-    Dir(PathBuf),
-    File(PathBuf),
-    Files(Vec<PathBuf>),
-    FromString(&'a str),
-    FromStringsWithPaths(&'a [(String, PathBuf)]),
 }
 
 impl SqlDoc {
@@ -193,7 +158,30 @@ impl FromStr for SqlDoc {
     }
 }
 
-impl SqlDocBuilder<'_> {
+/// Builder structure for the [`SqlDoc`]
+#[derive(Debug, Eq, PartialEq)]
+pub struct SqlDocBuilder<'a> {
+    /// The source for implementing the [`SqlDoc`] to be built
+    source: SqlFileDocSource<'a>,
+    /// The list of Paths to be ignored for parsing purposes.
+    deny: Vec<String>,
+    /// Tracks the chosen setting for flattening multiline comments
+    multiline_flat: MultiFlatten<'a>,
+    /// Tracks the chosen setting for leading comment collection
+    leading_type: LeadingCommentCapture,
+}
+
+/// Enum for specifying a file doc source as a `directory` or a specific `file`
+#[derive(Debug, Eq, PartialEq)]
+enum SqlFileDocSource<'a> {
+    Dir(PathBuf),
+    File(PathBuf),
+    Files(Vec<PathBuf>),
+    FromString(&'a str),
+    FromStringsWithPaths(&'a [(String, PathBuf)]),
+}
+
+impl<'a> SqlDocBuilder<'a> {
     /// Method for adding an item to the deny list
     ///
     /// # Parameters
@@ -206,20 +194,20 @@ impl SqlDocBuilder<'_> {
 
     /// Flattens the multiline comments without additional formatting
     #[must_use]
-    pub fn flatten_multiline(mut self) -> Self {
+    pub const fn flatten_multiline(mut self) -> Self {
         self.multiline_flat = MultiFlatten::FlattenWithNone;
         self
     }
 
     /// Flattens the multiline comments with [`String`] containing additional leading line formatting to add, such as punctuation.
     #[must_use]
-    pub fn flatten_multiline_with(mut self, suffix: &str) -> Self {
-        self.multiline_flat = MultiFlatten::Flatten(suffix.to_owned());
+    pub const fn flatten_multiline_with(mut self, suffix: &'a str) -> Self {
+        self.multiline_flat = MultiFlatten::Flatten(suffix);
         self
     }
     /// Preserves multiline comments line structure
     #[must_use]
-    pub fn preserve_multiline(mut self) -> Self {
+    pub const fn preserve_multiline(mut self) -> Self {
         self.multiline_flat = MultiFlatten::NoFlat;
         self
     }
@@ -254,115 +242,102 @@ impl SqlDocBuilder<'_> {
     /// - Will return `DocError` bubbled up
     pub fn build(self) -> Result<SqlDoc, DocError> {
         let docs: Vec<SqlFileDoc> = match &self.source {
-            SqlFileDocSource::Dir(path) => generate_docs_from_dir(path, &self.deny)?,
+            SqlFileDocSource::Dir(path) => {
+                generate_docs_from_dir(path, &self.deny, self.leading_type, self.multiline_flat)?
+            }
             SqlFileDocSource::File(file) => {
-                let sql_doc = generate_docs_from_file(file)?;
+                let sql_doc =
+                    generate_docs_from_file(file, self.leading_type, self.multiline_flat)?;
                 vec![sql_doc]
             }
             SqlFileDocSource::FromString(content) => {
-                let sql_docs = generate_docs_str(content, None)?;
+                let sql_docs =
+                    generate_docs_str(content, None, self.leading_type, self.multiline_flat)?;
                 vec![sql_docs]
             }
             SqlFileDocSource::FromStringsWithPaths(strings_paths) => {
-                generate_docs_from_strs_with_paths(strings_paths)?
+                generate_docs_from_strs_with_paths(
+                    strings_paths,
+                    self.leading_type,
+                    self.multiline_flat,
+                )?
             }
-            SqlFileDocSource::Files(files) => generate_docs_from_files(files)?,
+            SqlFileDocSource::Files(files) => {
+                generate_docs_from_files(files, self.leading_type, self.multiline_flat)?
+            }
         };
         let num_of_tables = docs.iter().map(super::docs::SqlFileDoc::number_of_tables).sum();
         let mut tables = Vec::with_capacity(num_of_tables);
         for sql_doc in docs {
             tables.extend(sql_doc);
         }
-        let mut sql_doc = SqlDoc::new(tables);
-        match self.multiline_flat {
-            MultiFlatten::FlattenWithNone => {
-                sql_doc = flatten_docs(sql_doc, None);
-            }
-            MultiFlatten::Flatten(flat_format) => {
-                sql_doc = flatten_docs(sql_doc, Some(&flat_format));
-            }
-            MultiFlatten::NoFlat => {}
-        }
+        let sql_doc = SqlDoc::new(tables);
         Ok(sql_doc)
     }
-}
-
-fn flatten_docs(mut sql_doc: SqlDoc, flat_format: Option<&str>) -> SqlDoc {
-    let format = flat_format.map_or("", |c| c);
-    for table in sql_doc.tables_mut() {
-        if let Some(doc) = table.doc() {
-            let new_doc = flatten_lines(doc.lines(), format);
-            table.set_doc(new_doc);
-        }
-        for column in table.columns_mut() {
-            if let Some(doc) = column.doc() {
-                let new_doc = flatten_lines(doc.lines(), format);
-                column.set_doc(new_doc);
-            }
-        }
-    }
-
-    sql_doc
-}
-
-fn flatten_lines<'a>(lines: impl Iterator<Item = &'a str>, sep: &str) -> String {
-    let mut out = String::new();
-    for (i, line) in lines.enumerate() {
-        if i > 0 {
-            out.push_str(sep);
-        }
-        out.push_str(line);
-    }
-    out
 }
 
 fn generate_docs_from_dir<P: AsRef<Path>, S: AsRef<str>>(
     source: P,
     deny: &[S],
+    capture: LeadingCommentCapture,
+    flatten: MultiFlatten,
 ) -> Result<Vec<SqlFileDoc>, DocError> {
     let deny_list: Vec<String> = deny.iter().map(|file| file.as_ref().to_owned()).collect();
     let file_set = SqlFiles::new(source, &deny_list)?;
     let mut sql_docs = Vec::new();
     for file in file_set.sql_files() {
-        let docs = generate_docs_from_file(file)?;
+        let docs = generate_docs_from_file(file, capture, flatten)?;
         sql_docs.push(docs);
     }
     Ok(sql_docs)
 }
 
-fn generate_docs_from_files(files: &[PathBuf]) -> Result<Vec<SqlFileDoc>, DocError> {
+fn generate_docs_from_files(
+    files: &[PathBuf],
+    capture: LeadingCommentCapture,
+    flatten: MultiFlatten,
+) -> Result<Vec<SqlFileDoc>, DocError> {
     let mut sql_docs = Vec::new();
     for file in files {
-        let docs = generate_docs_from_file(file)?;
+        let docs = generate_docs_from_file(file, capture, flatten)?;
         sql_docs.push(docs);
     }
     Ok(sql_docs)
 }
 
-fn generate_docs_from_file<P: AsRef<Path>>(source: P) -> Result<SqlFileDoc, DocError> {
+fn generate_docs_from_file<P: AsRef<Path>>(
+    source: P,
+    capture: LeadingCommentCapture,
+    flatten: MultiFlatten,
+) -> Result<SqlFileDoc, DocError> {
     let file = SqlSource::from_path(source.as_ref())?;
     let parsed_file = ParsedSqlFile::parse(file)?;
     let comments = Comments::parse_all_comments_from_file(&parsed_file)?;
-    let docs =
-        SqlFileDoc::from_parsed_file(&parsed_file, &comments, LeadingCommentCapture::default())?;
+    let docs = SqlFileDoc::from_parsed_file(&parsed_file, &comments, capture, flatten)?;
     Ok(docs)
 }
 
-fn generate_docs_str(content: &str, path: Option<PathBuf>) -> Result<SqlFileDoc, DocError> {
+fn generate_docs_str(
+    content: &str,
+    path: Option<PathBuf>,
+    capture: LeadingCommentCapture,
+    flatten: MultiFlatten,
+) -> Result<SqlFileDoc, DocError> {
     let dummy_file = SqlSource::from_str(content.to_owned(), path);
     let parsed_sql = ParsedSqlFile::parse(dummy_file)?;
     let comments = Comments::parse_all_comments_from_file(&parsed_sql)?;
-    let docs =
-        SqlFileDoc::from_parsed_file(&parsed_sql, &comments, LeadingCommentCapture::default())?;
+    let docs = SqlFileDoc::from_parsed_file(&parsed_sql, &comments, capture, flatten)?;
     Ok(docs)
 }
 
 fn generate_docs_from_strs_with_paths(
     strings_with_paths: &[(String, PathBuf)],
+    capture: LeadingCommentCapture,
+    flatten: MultiFlatten,
 ) -> Result<Vec<SqlFileDoc>, DocError> {
     let mut docs = Vec::new();
     for (content, path) in strings_with_paths {
-        docs.push(generate_docs_str(content, Some(path.to_owned()))?);
+        docs.push(generate_docs_str(content, Some(path.to_owned()), capture, flatten)?);
     }
 
     Ok(docs)
@@ -645,87 +620,67 @@ mod tests {
     }
 
     #[test]
-    fn test_flatten_lines_behavior() {
-        use crate::sql_doc::flatten_lines;
-        let input = vec!["a", "b", "c"];
-        let no_sep = flatten_lines(input.clone().into_iter(), "");
-        assert_eq!(no_sep, "abc");
-        let dash_sep = flatten_lines(input.clone().into_iter(), " - ");
-        assert_eq!(dash_sep, "a - b - c");
-        let single = flatten_lines(["solo"].into_iter(), "XXX");
-        assert_eq!(single, "solo");
+    fn test_preserve_multiline_keeps_newlines_in_docs() -> Result<(), Box<dyn std::error::Error>> {
+        let sql = r"
+        /* Table Doc line1
+           line2 */
+        CREATE TABLE things (
+            /* col1
+               doc */
+            id INTEGER
+        );
+    ";
+
+        let built = SqlDoc::builder_from_str(sql).preserve_multiline().build()?;
+
+        let t = built.table("things", None)?;
+        assert_eq!(t.doc(), Some("Table Doc line1\nline2"));
+        assert_eq!(t.columns()[0].doc(), Some("col1\ndoc"));
+        Ok(())
     }
 
     #[test]
-    fn test_flatten_docs_no_flatter() {
-        let table = TableDoc::new(
-            None,
-            "t".into(),
-            Some("line1\nline2".into()),
-            vec![
-                ColumnDoc::new("c1".into(), Some("a\nb".into())),
-                ColumnDoc::new("c2".into(), None),
-            ],
-            None,
+    fn test_flatten_multiline_no_separator_removes_newlines()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let sql = r"
+        /* A
+           B
+           C */
+        CREATE TABLE t (
+            /* x
+               y */
+            c INTEGER
         );
-        let flat_table = TableDoc::new(
-            None,
-            "t".into(),
-            Some("line1line2".into()),
-            vec![ColumnDoc::new("c1".into(), Some("ab".into())), ColumnDoc::new("c2".into(), None)],
-            None,
-        );
+    ";
 
-        let output = {
-            use crate::sql_doc::flatten_docs;
-            let original = SqlDoc::new(vec![table]);
-            flatten_docs(original, None)
-        };
-        assert_eq!(output.tables(), vec![flat_table], "NoFlat should not alter docs");
-    }
+        let built = SqlDoc::builder_from_str(sql).flatten_multiline().build()?;
 
-    #[test]
-    fn test_flatten_docs_flatten_no_separator() {
-        let table = TableDoc::new(
-            None,
-            "t".into(),
-            Some("A\nB\nC".into()),
-            vec![ColumnDoc::new("c".into(), Some("x\ny".into()))],
-            None,
-        );
-        let doc = SqlDoc::new(vec![table]);
-
-        let out = {
-            use crate::sql_doc::flatten_docs;
-            flatten_docs(doc, Some(""))
-        };
-
-        let t = &out.tables()[0];
-
+        let t = built.table("t", None)?;
         assert_eq!(t.doc(), Some("ABC"));
         assert_eq!(t.columns()[0].doc(), Some("xy"));
+        Ok(())
     }
 
     #[test]
-    fn test_flatten_docs_flatten_with_separator() {
-        let table = TableDoc::new(
-            None,
-            "t".into(),
-            Some("hello\nworld".into()),
-            vec![ColumnDoc::new("c".into(), Some("x\ny\nz".into()))],
-            None,
+    fn test_flatten_multiline_with_separator_inserts_separator()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let sql = r"
+        /* hello
+           world */
+        CREATE TABLE t (
+            /* x
+               y
+               z */
+            c INTEGER
         );
-        let doc = SqlDoc::new(vec![table]);
+    ";
 
-        let out = {
-            use crate::sql_doc::flatten_docs;
-            flatten_docs(doc, Some(" | "))
-        };
-
-        let t = &out.tables()[0];
-
+        let built = SqlDoc::builder_from_str(sql).flatten_multiline_with(" | ").build()?;
+        dbg!(&built);
+        let t = built.table("t", None)?;
         assert_eq!(t.doc(), Some("hello | world"));
         assert_eq!(t.columns()[0].doc(), Some("x | y | z"));
+        Ok(())
     }
 
     #[test]
@@ -740,35 +695,31 @@ mod tests {
 
     #[test]
     fn test_builder_build_with_flattening() -> Result<(), Box<dyn std::error::Error>> {
-        let base = env::temp_dir().join("builder_flatten_test");
-        let _ = fs::remove_dir_all(&base);
-        fs::create_dir_all(&base)?;
-        let file = base.join("t.sql");
-
         let sql = r"
-            /* Table Doc line1
-               line2 */
-            CREATE TABLE things (
-                /* col1
-                   doc */
-                id INTEGER
-            );
-        ";
+        /* Table Doc line1
+           line2 */
+        CREATE TABLE things (
+            /* col1
+               doc */
+            id INTEGER
+        );
+    ";
 
-        fs::write(&file, sql)?;
+        let built1 = SqlDoc::builder_from_str(sql).flatten_multiline_with(" • ").build()?;
+        let built2 = SqlDoc::builder_from_str(sql).flatten_multiline().build()?;
 
-        let built1 = SqlDoc::from_path(&file).flatten_multiline_with(" • ").build()?;
-        let built2 = SqlDoc::from_path(&file).flatten_multiline().build()?;
-        let t1 = &built1.tables()[0];
-        let t2 = &built2.tables()[0];
+        let t1 = built1.table("things", None)?;
+        let t2 = built2.table("things", None)?;
+
         assert_eq!(t1.doc(), Some("Table Doc line1 • line2"));
         assert_eq!(t1.columns()[0].doc(), Some("col1 • doc"));
 
         assert_eq!(t2.doc(), Some("Table Doc line1line2"));
         assert_eq!(t2.columns()[0].doc(), Some("col1doc"));
-        let _ = fs::remove_dir_all(&base);
+
         Ok(())
     }
+
     #[test]
     fn test_sql_doc_from_str_builds_expected_builder() {
         let content = "CREATE TABLE t(id INTEGER);";

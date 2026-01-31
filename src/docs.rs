@@ -7,7 +7,7 @@ use sqlparser::ast::{Ident, ObjectName, ObjectNamePart, Spanned, Statement};
 
 use crate::{
     ast::ParsedSqlFile,
-    comments::{Comments, LeadingCommentCapture},
+    comments::{Comments, LeadingCommentCapture, MultiFlatten},
     error::DocError,
 };
 
@@ -222,6 +222,7 @@ impl SqlFileDoc {
         file: &ParsedSqlFile,
         comments: &Comments,
         capture: LeadingCommentCapture,
+        flatten: MultiFlatten,
     ) -> Result<Self, DocError> {
         let mut tables = Vec::new();
         for statement in file.statements() {
@@ -232,8 +233,9 @@ impl SqlFileDoc {
                     let mut column_docs = Vec::new();
                     for column in &table.columns {
                         let column_start = column.span().start.line;
-                        let column_leading =
-                            comments.leading_comments(column_start, capture).collapse_comments();
+                        let column_leading = comments
+                            .leading_comments(column_start, capture)
+                            .collapse_comments(flatten);
                         let column_name = column.name.value.clone();
                         let column_doc = match column_leading {
                             Some(col_comment) => {
@@ -243,7 +245,8 @@ impl SqlFileDoc {
                         };
                         column_docs.push(column_doc);
                     }
-                    let table_leading = comments.leading_comment(table_start);
+                    let table_leading =
+                        comments.leading_comments(table_start, capture).collapse_comments(flatten);
                     let (schema, name) = schema_and_table(&table.name)?;
                     let table_doc = TableDoc::new(
                         schema,
@@ -504,7 +507,12 @@ CREATE TABLE posts (
 
         for file in parsed_set.files() {
             let comments = Comments::parse_all_comments_from_file(file)?;
-            let docs = SqlFileDoc::from_parsed_file(file, &comments, capture);
+            let docs = SqlFileDoc::from_parsed_file(
+                file,
+                &comments,
+                capture,
+                crate::comments::MultiFlatten::NoFlat,
+            );
             let filename = file
                 .file()
                 .path()
