@@ -47,7 +47,9 @@ fn main() -> Result<(), DocError> {
 
     fs::write(
         &example,
-        r#"/* Table storing user accounts */
+        r#"-- Table storing user accounts
+-- Contains all user values
+/* Rows generated at registration */
 CREATE TABLE users (
     /* Primary key for each user */
     id INTEGER PRIMARY KEY,
@@ -59,7 +61,13 @@ CREATE TABLE users (
     )?;
 
     // Extract documentation from a single file
-    let docs = SqlDoc::from_path(&example).build()?;
+    let docs = SqlDoc::from_path(&example)
+        // Capture all valid comment lines preceding the statements directly
+        .collect_all_leading()
+        // Replace `\n` with a `str`
+        .flatten_multiline_with(". ")
+        // Finally build the `SqlDoc`
+        .build()?;
     // Or extract recursively from a directory
     // let docs = SqlDoc::from_dir(&base).build()?;
 
@@ -69,7 +77,7 @@ CREATE TABLE users (
     // Table name
     assert_eq!(users.name(), "users");
     // Optional table-level documentation
-    assert_eq!(users.doc(), Some("Table storing user accounts"));
+    assert_eq!(users.doc(), Some("Table storing user accounts. Contains all user values. Rows generated at registration"));
     // Path to the source file
     assert_eq!(users.path(), Some(example.as_ref()));
 

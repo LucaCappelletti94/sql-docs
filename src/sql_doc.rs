@@ -226,7 +226,7 @@ impl<'a> SqlDocBuilder<'a> {
         self
     }
 
-    /// Collects all single line comments at most one multiline comment
+    /// Collects all single line comments and at most one multiline comment
     #[must_use]
     pub const fn collect_all_single_one_multi(mut self) -> Self {
         self.leading_type = LeadingCommentCapture::AllSingleOneMulti;
