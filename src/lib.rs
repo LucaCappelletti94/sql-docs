@@ -1,4 +1,7 @@
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![deny(rustdoc::broken_intra_doc_links)]
+#![deny(rustdoc::private_intra_doc_links)]
 //!
 //! ## Module layout
 //!
@@ -18,4 +21,4 @@ pub mod files;
 pub mod source;
 pub mod sql_doc;
 pub use sql_doc::SqlDoc;
-pub mod dialect;
+pub mod dialects;

@@ -6,11 +6,10 @@ use std::path::{Path, PathBuf};
 
 use sqlparser::{
     ast::Statement,
-    dialect::GenericDialect,
     parser::{Parser, ParserError},
 };
 
-use crate::source::SqlSource;
+use crate::{dialects::Dialects, source::SqlSource};
 
 /// A single SQL file plus all [`Statement`].
 #[derive(Debug)]
@@ -30,9 +29,8 @@ impl ParsedSqlFile {
     ///
     /// # Errors
     /// - Returns [`ParserError`] if parsing fails
-    pub fn parse(file: SqlSource) -> Result<Self, ParserError> {
-        let dialect = GenericDialect {};
-        let statements = Parser::parse_sql(&dialect, file.content())?;
+    pub fn parse(file: SqlSource, dialect: &Dialects) -> Result<Self, ParserError> {
+        let statements = Parser::parse_sql(dialect.dialect(), file.content())?;
         Ok(Self { file, statements })
     }
 
@@ -82,7 +80,10 @@ impl ParsedSqlFileSet {
     /// # Errors
     /// - [`ParserError`] is returned for any errors parsing
     pub fn parse_all(set: Vec<SqlSource>) -> Result<Self, ParserError> {
-        let files = set.into_iter().map(ParsedSqlFile::parse).collect::<Result<Vec<_>, _>>()?;
+        let files = set
+            .into_iter()
+            .map(|s| ParsedSqlFile::parse(s, &Dialects::default()))
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self { files })
     }
@@ -110,7 +111,7 @@ mod tests {
         let sql = "CREATE TABLE users (id INTEGER PRIMARY KEY);";
         fs::write(&file_path, sql)?;
         let sql_file = SqlSource::from_path(&file_path)?;
-        let parsed = ParsedSqlFile::parse(sql_file)?;
+        let parsed = ParsedSqlFile::parse(sql_file, &Dialects::Generic)?;
         assert_eq!(parsed.path(), Some(file_path.as_path()));
         assert_eq!(parsed.content(), sql);
         assert_eq!(parsed.statements().len(), 1);
@@ -147,4 +148,108 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
         Ok(())
     }
+
+        #[test]
+    fn parsed_sql_file_path_into_path_buf_round_trips() -> Result<(), Box<dyn std::error::Error>> {
+        let base = env::temp_dir().join("parsed_sql_file_path_into_path_buf_round_trips");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base)?;
+        let file_path = base.join("one.sql");
+        let sql = "CREATE TABLE t (id INTEGER PRIMARY KEY);";
+        fs::write(&file_path, sql)?;
+        let sql_file = SqlSource::from_path(&file_path)?;
+        let parsed = ParsedSqlFile::parse(sql_file, &Dialects::Generic)?;
+        assert_eq!(parsed.path_into_path_buf(), Some(file_path));
+        let _ = fs::remove_dir_all(&base);
+        Ok(())
+    }
+
+    #[test]
+    fn parsed_sql_file_parse_postgres_handles_pg_function_syntax() -> Result<(), Box<dyn std::error::Error>> {
+        let sql = r"
+            CREATE OR REPLACE FUNCTION f()
+            RETURNS SMALLINT
+            LANGUAGE plpgsql
+            SECURITY DEFINER
+            STABLE
+            AS $$
+            BEGIN
+                RETURN 4;
+            END;
+            $$;
+
+            CREATE TABLE t (id INTEGER PRIMARY KEY);
+        ";
+
+        let src = SqlSource::from_str(sql.to_owned(), None);
+        let parsed = ParsedSqlFile::parse(src, &Dialects::PostgreSql)?;
+        assert!(
+            parsed.statements().len() >= 2,
+            "expected at least 2 statements (function + table)"
+        );
+        assert!(
+            parsed
+                .statements()
+                .iter()
+                .any(|s| matches!(s, Statement::CreateTable { .. })),
+            "expected at least one CreateTable statement"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn parsed_sql_file_set_parse_all_uses_default_dialect() -> Result<(), Box<dyn std::error::Error>> {
+        let base = env::temp_dir().join("parsed_sql_file_set_parse_all_default_dialect");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base)?;
+
+        let file1 = base.join("one.sql");
+        let file2 = base.join("two.sql");
+
+        fs::write(&file1, "CREATE TABLE t1 (id INTEGER PRIMARY KEY);")?;
+
+        let pg_sql = r"
+            CREATE OR REPLACE FUNCTION f()
+            RETURNS SMALLINT
+            LANGUAGE plpgsql
+            SECURITY DEFINER
+            STABLE
+            AS $$
+            BEGIN
+                RETURN 4;
+            END;
+            $$;
+
+            CREATE TABLE t2 (id INTEGER PRIMARY KEY);
+        ";
+        fs::write(&file2, pg_sql)?;
+
+        let set = SqlSource::sql_sources(&base, &[])?;
+        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
+
+        assert_eq!(parsed_set.files().len(), 2);
+
+        for parsed in parsed_set.files() {
+            assert!(
+                parsed
+                    .statements()
+                    .iter()
+                    .any(|s| matches!(s, Statement::CreateTable { .. })),
+                "expected CreateTable in parsed file; got statements: {:?}",
+                parsed.statements()
+            );
+        }
+
+        let _ = fs::remove_dir_all(&base);
+        Ok(())
+    }
+
+    #[test]
+    fn parsed_sql_file_parse_invalid_sql_returns_error() {
+        let sql = "CREATE TABLE"; 
+        let src = SqlSource::from_str(sql.to_owned(), None);
+        let res = ParsedSqlFile::parse(src, &Dialects::Generic);
+        assert!(res.is_err(), "expected parse to fail for invalid SQL");
+    }
+
 }

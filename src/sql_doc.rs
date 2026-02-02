@@ -6,11 +6,11 @@ use std::{
     vec,
 };
 
-use sqlparser::dialect::Dialect;
 
 use crate::{
     ast::ParsedSqlFile,
     comments::{Comments, LeadingCommentCapture, MultiFlatten},
+    dialects::Dialects,
     docs::{SqlFileDoc, TableDoc},
     error::DocError,
     files::SqlFiles,
@@ -59,6 +59,7 @@ impl SqlDoc {
             deny: Vec::new(),
             multiline_flat: MultiFlatten::default(),
             leading_type: LeadingCommentCapture::default(),
+            dialect: Dialects::default(),
         }
     }
 
@@ -87,6 +88,7 @@ impl SqlDoc {
             deny: Vec::new(),
             multiline_flat: MultiFlatten::default(),
             leading_type: LeadingCommentCapture::default(),
+            dialect: Dialects::default(),
         }
     }
 
@@ -119,6 +121,7 @@ impl SqlDoc {
             deny: Vec::new(),
             multiline_flat: MultiFlatten::default(),
             leading_type: LeadingCommentCapture::default(),
+            dialect: Dialects::default(),
         }
     }
 
@@ -157,6 +160,7 @@ impl SqlDoc {
             deny: Vec::new(),
             multiline_flat: MultiFlatten::default(),
             leading_type: LeadingCommentCapture::default(),
+            dialect: Dialects::default(),
         }
     }
 
@@ -201,6 +205,7 @@ impl SqlDoc {
             deny: Vec::new(),
             multiline_flat: MultiFlatten::default(),
             leading_type: LeadingCommentCapture::default(),
+            dialect: Dialects::default(),
         }
     }
 
@@ -288,8 +293,8 @@ pub struct SqlDocBuilder<'a> {
     multiline_flat: MultiFlatten<'a>,
     /// Tracks the chosen setting for leading comment collection
     leading_type: LeadingCommentCapture,
-    /// The dialect specified to use
-    dialect: dyn Dialect,
+    /// The SQL dialect selection
+    dialect: Dialects,
 }
 
 /// Enum for specifying a file doc source as a `directory` or a specific `file`
@@ -354,6 +359,13 @@ impl<'a> SqlDocBuilder<'a> {
         self
     }
 
+    /// Selects the specified dialect of `SQL`
+    #[must_use]
+    pub const fn dialect(mut self, dialect: Dialects) -> Self {
+        self.dialect = dialect;
+        self
+    }
+
     /// Builds the [`SqlDoc`]
     ///
     ///
@@ -363,17 +375,30 @@ impl<'a> SqlDocBuilder<'a> {
     /// - Will return `DocError` bubbled up
     pub fn build(self) -> Result<SqlDoc, DocError> {
         let docs: Vec<SqlFileDoc> = match &self.source {
-            SqlFileDocSource::Dir(path) => {
-                generate_docs_from_dir(path, &self.deny, self.leading_type, self.multiline_flat)?
-            }
+            SqlFileDocSource::Dir(path) => generate_docs_from_dir(
+                path,
+                &self.deny,
+                self.leading_type,
+                self.multiline_flat,
+                self.dialect,
+            )?,
             SqlFileDocSource::File(file) => {
-                let sql_doc =
-                    generate_docs_from_file(file, self.leading_type, self.multiline_flat)?;
+                let sql_doc = generate_docs_from_file(
+                    file,
+                    self.leading_type,
+                    self.multiline_flat,
+                    self.dialect,
+                )?;
                 vec![sql_doc]
             }
             SqlFileDocSource::FromString(content) => {
-                let sql_docs =
-                    generate_docs_str(content, None, self.leading_type, self.multiline_flat)?;
+                let sql_docs = generate_docs_str(
+                    content,
+                    None,
+                    self.leading_type,
+                    self.multiline_flat,
+                    self.dialect,
+                )?;
                 vec![sql_docs]
             }
             SqlFileDocSource::FromStringsWithPaths(strings_paths) => {
@@ -381,11 +406,15 @@ impl<'a> SqlDocBuilder<'a> {
                     strings_paths,
                     self.leading_type,
                     self.multiline_flat,
+                    self.dialect,
                 )?
             }
-            SqlFileDocSource::Files(files) => {
-                generate_docs_from_files(files, self.leading_type, self.multiline_flat)?
-            }
+            SqlFileDocSource::Files(files) => generate_docs_from_files(
+                files,
+                self.leading_type,
+                self.multiline_flat,
+                self.dialect,
+            )?,
         };
         let num_of_tables = docs.iter().map(super::docs::SqlFileDoc::number_of_tables).sum();
         let mut tables = Vec::with_capacity(num_of_tables);
@@ -402,12 +431,13 @@ fn generate_docs_from_dir<P: AsRef<Path>, S: AsRef<str>>(
     deny: &[S],
     capture: LeadingCommentCapture,
     flatten: MultiFlatten,
+    dialect: Dialects,
 ) -> Result<Vec<SqlFileDoc>, DocError> {
     let deny_list: Vec<String> = deny.iter().map(|file| file.as_ref().to_owned()).collect();
     let file_set = SqlFiles::new(source, &deny_list)?;
     let mut sql_docs = Vec::new();
     for file in file_set.sql_files() {
-        let docs = generate_docs_from_file(file, capture, flatten)?;
+        let docs = generate_docs_from_file(file, capture, flatten, dialect)?;
         sql_docs.push(docs);
     }
     Ok(sql_docs)
@@ -417,10 +447,11 @@ fn generate_docs_from_files(
     files: &[PathBuf],
     capture: LeadingCommentCapture,
     flatten: MultiFlatten,
+    dialect: Dialects,
 ) -> Result<Vec<SqlFileDoc>, DocError> {
     let mut sql_docs = Vec::new();
     for file in files {
-        let docs = generate_docs_from_file(file, capture, flatten)?;
+        let docs = generate_docs_from_file(file, capture, flatten, dialect)?;
         sql_docs.push(docs);
     }
     Ok(sql_docs)
@@ -430,9 +461,10 @@ fn generate_docs_from_file<P: AsRef<Path>>(
     source: P,
     capture: LeadingCommentCapture,
     flatten: MultiFlatten,
+    dialect: Dialects,
 ) -> Result<SqlFileDoc, DocError> {
     let file = SqlSource::from_path(source.as_ref())?;
-    let parsed_file = ParsedSqlFile::parse(file)?;
+    let parsed_file = ParsedSqlFile::parse(file, &dialect)?;
     let comments = Comments::parse_all_comments_from_file(&parsed_file)?;
     let docs = SqlFileDoc::from_parsed_file(&parsed_file, &comments, capture, flatten)?;
     Ok(docs)
@@ -443,9 +475,10 @@ fn generate_docs_str(
     path: Option<PathBuf>,
     capture: LeadingCommentCapture,
     flatten: MultiFlatten,
+    dialect: Dialects,
 ) -> Result<SqlFileDoc, DocError> {
     let dummy_file = SqlSource::from_str(content.to_owned(), path);
-    let parsed_sql = ParsedSqlFile::parse(dummy_file)?;
+    let parsed_sql = ParsedSqlFile::parse(dummy_file, &dialect)?;
     let comments = Comments::parse_all_comments_from_file(&parsed_sql)?;
     let docs = SqlFileDoc::from_parsed_file(&parsed_sql, &comments, capture, flatten)?;
     Ok(docs)
@@ -455,10 +488,11 @@ fn generate_docs_from_strs_with_paths(
     strings_with_paths: &[(String, PathBuf)],
     capture: LeadingCommentCapture,
     flatten: MultiFlatten,
+    dialect: Dialects,
 ) -> Result<Vec<SqlFileDoc>, DocError> {
     let mut docs = Vec::new();
     for (content, path) in strings_with_paths {
-        docs.push(generate_docs_str(content, Some(path.to_owned()), capture, flatten)?);
+        docs.push(generate_docs_str(content, Some(path.to_owned()), capture, flatten, dialect)?);
     }
 
     Ok(docs)
@@ -475,6 +509,7 @@ mod tests {
     use crate::{
         SqlDoc,
         comments::LeadingCommentCapture,
+        dialects::Dialects,
         docs::{ColumnDoc, TableDoc},
         error::DocError,
         sql_doc::{MultiFlatten, SqlDocBuilder},
@@ -699,6 +734,7 @@ mod tests {
             deny: vec!["path1".to_owned(), "path2".to_owned()],
             multiline_flat: MultiFlatten::default(),
             leading_type: LeadingCommentCapture::default(),
+            dialect: Dialects::default(),
         };
         assert_eq!(actual_builder, expected_builder);
     }
@@ -852,6 +888,7 @@ mod tests {
             deny: vec![],
             multiline_flat: MultiFlatten::default(),
             leading_type: LeadingCommentCapture::default(),
+            dialect: Dialects::default(),
         };
 
         assert_eq!(actual, expected);
@@ -1052,5 +1089,69 @@ mod tests {
             }
             Ok(_) => panic!("expected error, got Ok"),
         }
+    }
+
+    #[test]
+    fn test_builder_default_dialect_is_postgres() {
+        let b = SqlDoc::from_path("dummy.sql");
+        assert!(
+            matches!(b, SqlDocBuilder { dialect: Dialects::PostgreSql, .. }),
+            "expected default dialect to be PostgreSql"
+        );
+        assert_eq!(Dialects::default(), Dialects::PostgreSql);
+    }
+
+    #[test]
+    fn test_builder_dialect_setter_updates_field() {
+        let b = SqlDoc::from_path("dummy.sql").dialect(Dialects::MySql);
+        assert!(matches!(b, SqlDocBuilder { dialect: Dialects::MySql, .. }));
+    }
+
+    #[test]
+    fn test_postgres_dialect_parses_postgres_only_function_syntax()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let sql = r"
+            CREATE OR REPLACE FUNCTION get_owner_role(user_uuid UUID, target_owner_id UUID)
+            RETURNS SMALLINT
+            LANGUAGE plpgsql
+            SECURITY DEFINER
+            STABLE
+            AS $$
+            BEGIN
+                RETURN 4;
+            END;
+            $$;
+
+            CREATE TABLE t (id INTEGER PRIMARY KEY);
+        ";
+        let doc = SqlDoc::builder_from_str(sql).build()?;
+        assert_eq!(doc.tables().len(), 1);
+        assert_eq!(doc.table("t", None)?.name(), "t");
+        Ok(())
+    }
+
+    #[test]
+    fn test_generic_dialect_ignores_non_table_pg_statements_and_still_builds()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let sql = r"
+        CREATE OR REPLACE FUNCTION get_owner_role(user_uuid UUID, target_owner_id UUID)
+        RETURNS SMALLINT
+        LANGUAGE plpgsql
+        SECURITY DEFINER
+        STABLE
+        AS $$
+        BEGIN
+            RETURN 4;
+        END;
+        $$;
+
+        CREATE TABLE t (id INTEGER PRIMARY KEY);
+    ";
+
+        let doc = SqlDoc::builder_from_str(sql).dialect(Dialects::Generic).build()?;
+
+        assert_eq!(doc.tables().len(), 1);
+        assert_eq!(doc.table("t", None)?.name(), "t");
+        Ok(())
     }
 }
