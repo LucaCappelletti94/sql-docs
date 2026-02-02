@@ -30,8 +30,28 @@ impl SqlDoc {
         Self { tables }
     }
 
-    /// Method for generating builder from a directory.
-    pub fn from_dir<P: AsRef<Path>>(root: &P) -> SqlDocBuilder<'_> {
+    /// Creates an [`SqlDocBuilder`] that will scan a directory for SQL files and build an [`SqlDoc`].
+    ///
+    /// This is the most convenient entry point when you have a folder of `.sql` files.
+    /// The returned builder can be further configured with builder methods before calling [`SqlDocBuilder::build`].
+    ///
+    /// # Parameters
+    /// - `root`: Path to the directory containing SQL files.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use sql_docs::sql_doc::SqlDoc;
+    ///
+    /// let doc = SqlDoc::from_dir("migrations")
+    ///     .deny("migrations/old/ignore.sql")
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// // Work with table docs
+    /// let users = doc.table("users", None).unwrap();
+    /// assert_eq!(users.name(), "users");
+    /// ```
+    pub fn from_dir<P: AsRef<Path> + ?Sized>(root: &P) -> SqlDocBuilder<'_> {
         SqlDocBuilder {
             source: SqlFileDocSource::Dir(root.as_ref().to_path_buf()),
             deny: Vec::new(),
@@ -39,7 +59,26 @@ impl SqlDoc {
             leading_type: LeadingCommentCapture::default(),
         }
     }
-    /// Method for generating builder from a [`Path`] of a single file
+
+    /// Creates an [`SqlDocBuilder`] from a single SQL file on disk.
+    ///
+    /// Use this when you want documentation for one specific file. The resulting tables will have their
+    /// `path` stamped from the provided file path (see tests such as `build_sql_doc_from_file`).
+    ///
+    /// # Parameters
+    /// - `path`: Path to a single SQL file.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use sql_docs::sql_doc::SqlDoc;
+    ///
+    /// let doc = SqlDoc::from_path("schema.sql")
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// let t = doc.table("users", None).unwrap();
+    /// assert_eq!(t.name(), "users");
+    /// ```
     pub fn from_path<P: AsRef<Path> + ?Sized>(path: &P) -> SqlDocBuilder<'_> {
         SqlDocBuilder {
             source: SqlFileDocSource::File(path.as_ref().to_path_buf()),
@@ -49,7 +88,27 @@ impl SqlDoc {
         }
     }
 
-    /// Method for generating builder from a [`[Path]`]
+    /// Creates an [`SqlDocBuilder`] from an explicit list of SQL file paths.
+    ///
+    /// This is useful when the files you want are scattered across directories, or when you already
+    /// have an exact list (e.g. selected by another tool). Each parsed table will have its `path`
+    /// stamped based on the file it came from (see `test_build_sql_doc_from_paths`).
+    ///
+    /// # Parameters
+    /// - `paths`: Slice of paths to SQL files.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use sql_docs::sql_doc::SqlDoc;
+    ///
+    /// let paths = vec!["one.sql", "two.sql"];
+    /// let doc = SqlDoc::from_paths(&paths)
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// assert!(doc.table("users", None).is_ok());
+    /// assert!(doc.table("posts", None).is_ok());
+    /// ```
     pub fn from_paths<P: AsRef<Path>>(paths: &[P]) -> SqlDocBuilder<'_> {
         SqlDocBuilder {
             source: SqlFileDocSource::Files(
@@ -61,7 +120,34 @@ impl SqlDoc {
         }
     }
 
-    /// Creates a builder from SQL text (no filesystem path is associated) from a [`str`]
+    /// Creates an [`SqlDocBuilder`] from raw SQL text.
+    ///
+    /// This does **not** associate any filesystem path with the input, so discovered tables will have
+    /// `path == None` (see `test_builder_from_str_no_path_has_none_path`).
+    ///
+    /// This is handy for:
+    /// - tests
+    /// - parsing SQL from a network source
+    /// - parsing SQL assembled in-memory
+    ///
+    /// # Parameters
+    /// - `content`: SQL text to parse.
+    ///
+    /// # Examples
+    /// ```
+    /// use sql_docs::sql_doc::SqlDoc;
+    ///
+    /// let sql = r#"
+    ///     -- Users table
+    ///     CREATE TABLE users (id INTEGER PRIMARY KEY);
+    /// "#;
+    ///
+    /// let doc = SqlDoc::builder_from_str(sql).build().unwrap();
+    /// let users = doc.table("users", None).unwrap();
+    ///
+    /// // No backing file path when built from a string:
+    /// assert_eq!(users.path(), None);
+    /// ```
     #[must_use]
     pub fn builder_from_str(content: &str) -> SqlDocBuilder<'_> {
         SqlDocBuilder {
@@ -72,7 +158,38 @@ impl SqlDoc {
         }
     }
 
-    /// Creates a builder from a vec of tuples containing the `sql` as [`String`] and the path as [`PathBuf`]
+    /// Creates an [`SqlDocBuilder`] from from raw SQL text while preserving an associated path.
+    ///
+    /// Each tuple is interpreted as:
+    /// - `String`: the SQL text to parse
+    /// - `PathBuf`: the path to associate with that SQL text
+    ///
+    ///
+    /// # Parameters
+    /// - `string_with_path`: Slice of `(sql, path)` pairs, where `sql` is the SQL text and `path` is
+    ///   the path that should be attached to any discovered tables.
+    ///
+    /// # Examples
+    /// ```
+    /// use std::path::PathBuf;
+    /// use sql_docs::sql_doc::SqlDoc;
+    ///
+    /// let sql_users = "CREATE TABLE users (id INTEGER PRIMARY KEY);".to_owned();
+    /// let sql_posts = "CREATE TABLE posts (id INTEGER PRIMARY KEY);".to_owned();
+    ///
+    /// let p1 = PathBuf::from("a/users.sql");
+    /// let p2 = PathBuf::from("b/posts.sql");
+    ///
+    /// let inputs = vec![(sql_users, p1.clone()), (sql_posts, p2.clone())];
+    ///
+    /// let doc = SqlDoc::builder_from_strs_with_paths(&inputs).build().unwrap();
+    ///
+    /// let users = doc.table("users", None).unwrap();
+    /// let posts = doc.table("posts", None).unwrap();
+    ///
+    /// assert_eq!(users.path(), Some(p1.as_path()));
+    /// assert_eq!(posts.path(), Some(p2.as_path()));
+    /// ```
     #[must_use]
     pub fn builder_from_strs_with_paths(
         string_with_path: &[(String, PathBuf)],

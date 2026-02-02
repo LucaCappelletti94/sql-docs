@@ -94,6 +94,7 @@ These are the primary entry points most users will interact with:
 * [`SqlDocBuilder::build`](https://docs.rs/sql-docs/latest/sql_docs/sql_doc/struct.SqlDocBuilder.html#method.build) Finalize the builder and produce a [`SqlDoc`].
 * [`SqlDocBuilder::deny`](https://docs.rs/sql-docs/latest/sql_docs/sql_doc/struct.SqlDocBuilder.html#method.deny) Exclude specific files by full path.
 * [`SqlDocBuilder::flatten_multiline`](https://docs.rs/sql-docs/latest/sql_docs/sql_doc/struct.SqlDocBuilder.html#method.flatten_multiline) Flatten multiline comments into a single line.
+* [`SqlDocBuilder::collect_single_nearest`](https://docs.rs/sql-docs/latest/sql_docs/sql_doc/struct.SqlDocBuilder.html#method.collect_single_nearest) Collect only the nearest leading comment.
 
 ## Use Cases
 
@@ -102,7 +103,7 @@ This crate is designed for generating documentation from SQL schemas by attachin
 * Tables
 * Columns
 
-using **only comments that immediately precede** the items they describe.
+using **only comments that immediately precede** the items they describe, with the ability to differentiate between multiple leading comments per statement or collect only the nearest comment preceding a statement.
 
 This makes it well-suited for:
 
@@ -117,3 +118,4 @@ This makes it well-suited for:
 * Comment attachment is line-based and deterministic.
 * One SQL file may define multiple tables.
 * No database connection is required.
+* `sql_doc` items are sorted by `table` name and `column` name, supporting binary searching
