@@ -149,7 +149,7 @@ mod tests {
         Ok(())
     }
 
-        #[test]
+    #[test]
     fn parsed_sql_file_path_into_path_buf_round_trips() -> Result<(), Box<dyn std::error::Error>> {
         let base = env::temp_dir().join("parsed_sql_file_path_into_path_buf_round_trips");
         let _ = fs::remove_dir_all(&base);
@@ -165,7 +165,8 @@ mod tests {
     }
 
     #[test]
-    fn parsed_sql_file_parse_postgres_handles_pg_function_syntax() -> Result<(), Box<dyn std::error::Error>> {
+    fn parsed_sql_file_parse_postgres_handles_pg_function_syntax()
+    -> Result<(), Box<dyn std::error::Error>> {
         let sql = r"
             CREATE OR REPLACE FUNCTION f()
             RETURNS SMALLINT
@@ -188,17 +189,15 @@ mod tests {
             "expected at least 2 statements (function + table)"
         );
         assert!(
-            parsed
-                .statements()
-                .iter()
-                .any(|s| matches!(s, Statement::CreateTable { .. })),
+            parsed.statements().iter().any(|s| matches!(s, Statement::CreateTable { .. })),
             "expected at least one CreateTable statement"
         );
         Ok(())
     }
 
     #[test]
-    fn parsed_sql_file_set_parse_all_uses_default_dialect() -> Result<(), Box<dyn std::error::Error>> {
+    fn parsed_sql_file_set_parse_all_uses_default_dialect() -> Result<(), Box<dyn std::error::Error>>
+    {
         let base = env::temp_dir().join("parsed_sql_file_set_parse_all_default_dialect");
         let _ = fs::remove_dir_all(&base);
         fs::create_dir_all(&base)?;
@@ -231,10 +230,7 @@ mod tests {
 
         for parsed in parsed_set.files() {
             assert!(
-                parsed
-                    .statements()
-                    .iter()
-                    .any(|s| matches!(s, Statement::CreateTable { .. })),
+                parsed.statements().iter().any(|s| matches!(s, Statement::CreateTable { .. })),
                 "expected CreateTable in parsed file; got statements: {:?}",
                 parsed.statements()
             );
@@ -246,10 +242,9 @@ mod tests {
 
     #[test]
     fn parsed_sql_file_parse_invalid_sql_returns_error() {
-        let sql = "CREATE TABLE"; 
+        let sql = "CREATE TABLE";
         let src = SqlSource::from_str(sql.to_owned(), None);
         let res = ParsedSqlFile::parse(src, &Dialects::Generic);
         assert!(res.is_err(), "expected parse to fail for invalid SQL");
     }
-
 }

@@ -6,7 +6,6 @@ use std::{
     vec,
 };
 
-
 use crate::{
     ast::ParsedSqlFile,
     comments::{Comments, LeadingCommentCapture, MultiFlatten},
