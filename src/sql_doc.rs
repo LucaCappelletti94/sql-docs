@@ -41,7 +41,7 @@ impl SqlDoc {
     ///
     /// # Examples
     /// ```no_run
-    /// use sql_docs::sql_doc::SqlDoc;
+    /// use sql_docs::SqlDoc;
     /// use sqlparser::dialect::GenericDialect;
     ///
     /// let doc = SqlDoc::from_dir("migrations")
@@ -72,8 +72,7 @@ impl SqlDoc {
     ///
     /// # Examples
     /// ```no_run
-    /// use sql_docs::sql_doc::SqlDoc;
-    /// use sqlparser::dialect::GenericDialect;
+    /// use sql_docs::{SqlDoc,GenericDialect};
     ///
     /// let doc = SqlDoc::from_path("schema.sql")
     ///     .build::<GenericDialect>()
@@ -102,8 +101,7 @@ impl SqlDoc {
     ///
     /// # Examples
     /// ```no_run
-    /// use sql_docs::sql_doc::SqlDoc;
-    /// use sqlparser::dialect::GenericDialect;
+    /// use sql_docs::{SqlDoc,GenericDialect};
     ///
     /// let paths = vec!["one.sql", "two.sql"];
     /// let doc = SqlDoc::from_paths(&paths)
@@ -139,8 +137,7 @@ impl SqlDoc {
     ///
     /// # Examples
     /// ```
-    /// use sql_docs::sql_doc::SqlDoc;
-    /// use sqlparser::dialect::GenericDialect;
+    /// use sql_docs::{SqlDoc,GenericDialect};
     ///
     /// let sql = r#"
     ///     -- Users table
@@ -177,8 +174,7 @@ impl SqlDoc {
     /// # Examples
     /// ```
     /// use std::path::PathBuf;
-    /// use sql_docs::sql_doc::SqlDoc;
-    /// use sqlparser::dialect::GenericDialect;
+    /// use sql_docs::{SqlDoc,GenericDialect};
     ///
     /// let sql_users = "CREATE TABLE users (id INTEGER PRIMARY KEY);".to_owned();
     /// let sql_posts = "CREATE TABLE posts (id INTEGER PRIMARY KEY);".to_owned();

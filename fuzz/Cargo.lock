@@ -226,7 +226,7 @@ dependencies = [
 [[package]]
 name = "sqlparser"
 version = "0.60.0"
-source = "git+https://github.com/LucaCappelletti94/sqlparser-rs?branch=main#c8b7f7cf4281cdfff3e08e9827928662b8be8095"
+source = "git+https://github.com/LucaCappelletti94/sqlparser-rs?branch=dialect-derives#149effc2e959316aa96f9ddbd12bad3c3d0fd6df"
 dependencies = [
  "log",
  "recursive",

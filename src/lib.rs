@@ -11,7 +11,7 @@
 //! - [`docs`]     — Generate structured documentation (`TableDoc`, `ColumnDoc`)
 //! - [`sql_doc`]  — Build the top-level [`SqlDoc`] and primary entry point
 //!
-//! **Start here:** [`SqlDoc::from_dir`] or [`SqlDoc::from_path`]
+//! **Start here:** [`SqlDoc::from_dir`], [`SqlDoc::from_path`], or [`SqlDoc::builder_from_str`]
 
 pub mod ast;
 pub mod comments;
@@ -20,4 +20,25 @@ pub mod error;
 pub mod files;
 pub mod source;
 pub mod sql_doc;
-pub use sql_doc::SqlDoc;
+pub use crate::comments::{LeadingCommentCapture, MultiFlatten};
+pub use crate::docs::{ColumnDoc, TableDoc};
+pub use crate::error::DocError;
+pub use crate::sql_doc::{SqlDoc, SqlDocBuilder};
+
+/// Common imports for typical usage of this crate.
+pub mod prelude {
+    pub use crate::{
+        AnsiDialect, BigQueryDialect, ClickHouseDialect, DatabricksDialect, Dialect, DuckDbDialect,
+        GenericDialect, HiveDialect, MsSqlDialect, MySqlDialect, OracleDialect, PostgreSqlDialect,
+        RedshiftSqlDialect, SQLiteDialect, SnowflakeDialect,
+    };
+    pub use crate::{
+        ColumnDoc, DocError, LeadingCommentCapture, MultiFlatten, SqlDoc, SqlDocBuilder, TableDoc,
+    };
+}
+
+pub use sqlparser::dialect::{
+    AnsiDialect, BigQueryDialect, ClickHouseDialect, DatabricksDialect, Dialect, DuckDbDialect,
+    GenericDialect, HiveDialect, MsSqlDialect, MySqlDialect, OracleDialect, PostgreSqlDialect,
+    RedshiftSqlDialect, SQLiteDialect, SnowflakeDialect,
+};

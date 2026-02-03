@@ -34,10 +34,8 @@ CREATE TABLE users (
 ```
 A rudimentary implementation can be generated with:
 ```rust
-use sql_docs::SqlDoc;
-use sql_docs::error::DocError;
+use sql_docs::{GenericDialect,SqlDoc,error::DocError};
 use std::{env, fs};
-use sqlparser::dialect::GenericDialect;
 
 fn main() -> Result<(), DocError> {
     // Temporary directory and file created for demonstration purposes
