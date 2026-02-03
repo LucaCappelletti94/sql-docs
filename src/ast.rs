@@ -6,10 +6,11 @@ use std::path::{Path, PathBuf};
 
 use sqlparser::{
     ast::Statement,
+    dialect::Dialect,
     parser::{Parser, ParserError},
 };
 
-use crate::{dialects::Dialects, source::SqlSource};
+use crate::source::SqlSource;
 
 /// A single SQL file plus all [`Statement`].
 #[derive(Debug)]
@@ -29,8 +30,11 @@ impl ParsedSqlFile {
     ///
     /// # Errors
     /// - Returns [`ParserError`] if parsing fails
-    pub fn parse(file: SqlSource, dialect: &Dialects) -> Result<Self, ParserError> {
-        let statements = Parser::parse_sql(dialect.dialect(), file.content())?;
+    pub fn parse<D>(file: SqlSource) -> Result<Self, ParserError>
+    where
+        D: Dialect + Default,
+    {
+        let statements = Parser::parse_sql(&D::default(), file.content())?;
         Ok(Self { file, statements })
     }
 
@@ -79,11 +83,12 @@ impl ParsedSqlFileSet {
     ///
     /// # Errors
     /// - [`ParserError`] is returned for any errors parsing
-    pub fn parse_all(set: Vec<SqlSource>) -> Result<Self, ParserError> {
-        let files = set
-            .into_iter()
-            .map(|s| ParsedSqlFile::parse(s, &Dialects::default()))
-            .collect::<Result<Vec<_>, _>>()?;
+    pub fn parse_all<D>(set: Vec<SqlSource>) -> Result<Self, ParserError>
+    where
+        D: Dialect + Default,
+    {
+        let files =
+            set.into_iter().map(ParsedSqlFile::parse::<D>).collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self { files })
     }
@@ -99,6 +104,8 @@ impl ParsedSqlFileSet {
 mod tests {
     use std::{env, fs};
 
+    use sqlparser::dialect::{GenericDialect, PostgreSqlDialect};
+
     use super::*;
     use crate::source::SqlSource;
 
@@ -111,7 +118,7 @@ mod tests {
         let sql = "CREATE TABLE users (id INTEGER PRIMARY KEY);";
         fs::write(&file_path, sql)?;
         let sql_file = SqlSource::from_path(&file_path)?;
-        let parsed = ParsedSqlFile::parse(sql_file, &Dialects::Generic)?;
+        let parsed = ParsedSqlFile::parse::<GenericDialect>(sql_file)?;
         assert_eq!(parsed.path(), Some(file_path.as_path()));
         assert_eq!(parsed.content(), sql);
         assert_eq!(parsed.statements().len(), 1);
@@ -133,7 +140,7 @@ mod tests {
         fs::write(&file1, sql1)?;
         fs::write(&file2, sql2)?;
         let set = SqlSource::sql_sources(&base, &[])?;
-        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
+        let parsed_set = ParsedSqlFileSet::parse_all::<GenericDialect>(set)?;
         let existing_files = parsed_set.files();
         assert_eq!(existing_files.len(), 2);
         for parsed in existing_files {
@@ -158,7 +165,7 @@ mod tests {
         let sql = "CREATE TABLE t (id INTEGER PRIMARY KEY);";
         fs::write(&file_path, sql)?;
         let sql_file = SqlSource::from_path(&file_path)?;
-        let parsed = ParsedSqlFile::parse(sql_file, &Dialects::Generic)?;
+        let parsed = ParsedSqlFile::parse::<GenericDialect>(sql_file)?;
         assert_eq!(parsed.path_into_path_buf(), Some(file_path));
         let _ = fs::remove_dir_all(&base);
         Ok(())
@@ -183,7 +190,7 @@ mod tests {
         ";
 
         let src = SqlSource::from_str(sql.to_owned(), None);
-        let parsed = ParsedSqlFile::parse(src, &Dialects::PostgreSql)?;
+        let parsed = ParsedSqlFile::parse::<PostgreSqlDialect>(src)?;
         assert!(
             parsed.statements().len() >= 2,
             "expected at least 2 statements (function + table)"
@@ -224,7 +231,7 @@ mod tests {
         fs::write(&file2, pg_sql)?;
 
         let set = SqlSource::sql_sources(&base, &[])?;
-        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
+        let parsed_set = ParsedSqlFileSet::parse_all::<GenericDialect>(set)?;
 
         assert_eq!(parsed_set.files().len(), 2);
 
@@ -244,7 +251,7 @@ mod tests {
     fn parsed_sql_file_parse_invalid_sql_returns_error() {
         let sql = "CREATE TABLE";
         let src = SqlSource::from_str(sql.to_owned(), None);
-        let res = ParsedSqlFile::parse(src, &Dialects::Generic);
+        let res = ParsedSqlFile::parse::<GenericDialect>(src);
         assert!(res.is_err(), "expected parse to fail for invalid SQL");
     }
 }

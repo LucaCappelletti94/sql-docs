@@ -337,6 +337,7 @@ mod tests {
 
     use sqlparser::{
         ast::{Ident, ObjectName, ObjectNamePart, ObjectNamePartFunction},
+        dialect::GenericDialect,
         tokenizer::Span,
     };
 
@@ -501,7 +502,7 @@ CREATE TABLE posts (
         fs::File::create(&file4)?;
         fs::write(&file4, no_comments_sql())?;
         let set = SqlSource::sql_sources(&base, &[])?;
-        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
+        let parsed_set = ParsedSqlFileSet::parse_all::<GenericDialect>(set)?;
         let expected_values = expect_values();
         let capture = crate::comments::LeadingCommentCapture::default();
 

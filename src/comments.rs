@@ -468,6 +468,8 @@ pub enum MultiFlatten<'a> {
 mod tests {
     use std::{env, fs};
 
+    use sqlparser::dialect::GenericDialect;
+
     use crate::comments::{Comment, CommentError, CommentKind, Comments, Location, Span};
 
     #[test]
@@ -544,7 +546,7 @@ mod tests {
         fs::File::create(&file4)?;
         fs::write(&file4, no_comments_sql())?;
         let set = SqlSource::sql_sources(&base, &[])?;
-        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
+        let parsed_set = ParsedSqlFileSet::parse_all::<GenericDialect>(set)?;
 
         for file in parsed_set.files() {
             let parsed_comments = Comments::parse_all_comments_from_file(file)?;
@@ -771,7 +773,7 @@ CREATE TABLE posts (
         fs::File::create(&file)?;
         fs::write(&file, single_line_comments_sql())?;
         let set = SqlSource::sql_sources(&base, &[])?;
-        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
+        let parsed_set = ParsedSqlFileSet::parse_all::<GenericDialect>(set)?;
         let file = parsed_set
             .files()
             .iter()
@@ -809,7 +811,7 @@ CREATE TABLE posts (
         fs::File::create(&file)?;
         fs::write(&file, multiline_comments_sql())?;
         let set = SqlSource::sql_sources(&base, &[])?;
-        let parsed_set = ParsedSqlFileSet::parse_all(set)?;
+        let parsed_set = ParsedSqlFileSet::parse_all::<GenericDialect>(set)?;
         let file = parsed_set
             .files()
             .iter()

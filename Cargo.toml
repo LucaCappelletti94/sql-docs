@@ -22,7 +22,7 @@ default = []
 fuzzing = []
 
 [dependencies]
-sqlparser = { git = "https://github.com/LucaCappelletti94/sqlparser-rs", branch = "main" }
+sqlparser = { git = "https://github.com/LucaCappelletti94/sqlparser-rs", branch = "dialect-derives" }
 
 [lints.rust]
 missing_docs = "forbid"

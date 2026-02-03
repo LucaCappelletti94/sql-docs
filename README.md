@@ -37,6 +37,7 @@ A rudimentary implementation can be generated with:
 use sql_docs::SqlDoc;
 use sql_docs::error::DocError;
 use std::{env, fs};
+use sqlparser::dialect::GenericDialect;
 
 fn main() -> Result<(), DocError> {
     // Temporary directory and file created for demonstration purposes
@@ -67,7 +68,7 @@ CREATE TABLE users (
         // Replace `\n` with a `str`
         .flatten_multiline_with(". ")
         // Finally build the `SqlDoc`
-        .build()?;
+        .build::<GenericDialect>()?;
     // Or extract recursively from a directory
     // let docs = SqlDoc::from_dir(&base).build()?;
 
