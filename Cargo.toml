@@ -23,10 +23,16 @@ std = ["sqlparser/std", "sqlparser/recursive-protection"]
 fuzzing = []
 
 [dependencies]
-sqlparser = { version = "0.62", default-features = false }
+sqlparser = { version = "0.63", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+
+# Follow apache/datafusion-sqlparser-rs main until a crates.io release ships
+# 0.63. The patch unifies this fork and its consumers onto one `sqlparser`.
+[patch.crates-io]
+sqlparser = { git = "https://github.com/apache/datafusion-sqlparser-rs", branch = "main" }
+sqlparser_derive = { git = "https://github.com/apache/datafusion-sqlparser-rs", branch = "main" }
 
 [lints.rust]
 missing_docs = "forbid"
