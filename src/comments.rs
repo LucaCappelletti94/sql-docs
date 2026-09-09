@@ -896,7 +896,7 @@ CREATE TABLE posts (
         ];
         let length = comment_vec.len();
         let comments = Comments::new(comment_vec.clone());
-        assert!(comments.comments().len() == length);
+        assert_eq!(comments.comments().len(), length);
         for (i, comment) in comments.comments().iter().enumerate() {
             assert_eq!(comment.text(), comment_vec[i].text());
             assert_eq!(comment.span().start(), comment_vec[i].span().start());
