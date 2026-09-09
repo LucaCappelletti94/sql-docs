@@ -23,7 +23,7 @@ std = ["sqlparser/std", "sqlparser/recursive-protection"]
 fuzzing = []
 
 [dependencies]
-sqlparser = { version = "0.62", default-features = false }
+sqlparser = { version = "0.63", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
