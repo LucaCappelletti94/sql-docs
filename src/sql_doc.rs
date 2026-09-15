@@ -203,6 +203,8 @@ impl SqlDoc {
 
     /// Method for finding a specific [`TableDoc`] by `name`
     ///
+    /// A `schema` of [`None`] matches only tables that carry no schema.
+    ///
     /// # Parameters
     /// - the table `name` as a [`str`]
     /// - the table schema as `Option` of [`str`]
@@ -219,7 +221,11 @@ impl SqlDoc {
         }
         let end = tables.partition_point(|t| t.name() <= name);
         match &tables[start..end] {
-            [single] => Ok(single),
+            [single] if single.schema() == schema => Ok(single),
+            [_] => Err(DocError::TableWithSchemaNotFound {
+                name: name.to_owned(),
+                schema: schema.map_or_else(|| "No schema provided".to_owned(), ToOwned::to_owned),
+            }),
             multiple => {
                 let mut schemas = multiple.iter().filter(|v| v.schema() == schema);
                 let first = schemas.next().ok_or_else(|| DocError::TableWithSchemaNotFound {
@@ -1192,6 +1198,57 @@ mod tests {
 
         assert_eq!(doc.tables().len(), 1);
         assert_eq!(doc.table("t", None)?.name(), "t");
+        Ok(())
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn table_comment_is_not_repeated_on_its_columns() -> Result<(), Box<dyn core::error::Error>> {
+        let doc = SqlDoc::builder_from_str("-- table doc\nCREATE TABLE t (a INT, b INT);")
+            .build::<GenericDialect>()?;
+        let table = doc.table("t", None)?;
+        assert_eq!(table.doc(), Some("table doc"));
+        assert_eq!(table.column("a")?.doc(), None);
+        assert_eq!(table.column("b")?.doc(), None);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn column_comment_belongs_to_the_first_column_on_its_line()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let doc = SqlDoc::builder_from_str("CREATE TABLE t (\n  -- a doc\n  a INT, b INT\n);")
+            .build::<GenericDialect>()?;
+        let table = doc.table("t", None)?;
+        assert_eq!(table.column("a")?.doc(), Some("a doc"));
+        assert_eq!(table.column("b")?.doc(), None);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn leading_comment_belongs_to_the_first_statement_on_its_line()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let doc =
+            SqlDoc::builder_from_str("-- first\nCREATE TABLE t (a INT); CREATE TABLE u (b INT);")
+                .build::<GenericDialect>()?;
+        assert_eq!(doc.table("t", None)?.doc(), Some("first"));
+        assert_eq!(doc.table("u", None)?.doc(), None);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn table_lookup_rejects_a_schema_the_table_does_not_have()
+    -> Result<(), Box<dyn core::error::Error>> {
+        let doc = SqlDoc::builder_from_str("CREATE TABLE app.users (id INT);")
+            .build::<GenericDialect>()?;
+        assert_eq!(doc.table("users", Some("app"))?.name(), "users");
+        assert!(matches!(
+            doc.table("users", Some("other")),
+            Err(DocError::TableWithSchemaNotFound { .. })
+        ));
+        assert!(matches!(doc.table("users", None), Err(DocError::TableWithSchemaNotFound { .. })));
         Ok(())
     }
 }

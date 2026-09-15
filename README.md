@@ -145,7 +145,9 @@ This makes it well-suited for:
 
 * Inline and interstitial comments are intentionally ignored, and a comment preceded by code on its own line is inline.
 * Comment markers inside string literals, quoted identifiers and dollar quoted strings are text, and block comments nest.
+* A comment documents the first statement or column that begins on the following line, so it is never reused for a second item.
 * Comment attachment is line-based and deterministic.
 * One SQL file may define multiple tables.
 * No database connection is required.
 * `sql_doc` items are sorted by `table` name and `column` name, supporting binary searching
+* `SqlDoc::table` matches the schema it is given, and a schema of `None` matches only unqualified tables.

@@ -131,6 +131,12 @@ impl Comment {
     pub fn text(&self) -> &str {
         &self.text
     }
+
+    /// Consumes the comment and returns its content.
+    #[must_use]
+    pub fn into_text(self) -> String {
+        self.text
+    }
 }
 
 /// Enum for returning errors withe Comment parsing
@@ -278,10 +284,14 @@ impl Comments {
     /// - An `u64` value representing the desired line to check above.
     #[must_use]
     pub fn leading_comment(&self, line: u64) -> Option<&Comment> {
-        self.comments().iter().rev().find(|comment| comment.span().end().line() + 1 == line)
+        let before = self.comments.partition_point(|c| c.span().start().line() < line);
+        self.comments[..before].last().filter(|c| c.span().end().line() + 1 == line)
     }
 
     /// Finds leading comments before specific line based on [`LeadingCommentCapture`] preference
+    ///
+    /// Several comments on one line all belong to that line, so all of them are
+    /// returned when the line is part of the captured run.
     ///
     /// # Parameters
     /// - [`Comments`] object
@@ -289,66 +299,87 @@ impl Comments {
     /// - [`LeadingCommentCapture`] preference
     #[must_use]
     pub fn leading_comments(&self, line: u64, capture: LeadingCommentCapture) -> Self {
-        let mut comments: Vec<Comment> = Vec::new();
-        let mut current_line = line;
-        let mut seen_multiline = false;
-        while let Some(leading_comment) = self.leading_comment(current_line) {
-            match capture {
-                LeadingCommentCapture::SingleNearest => {
-                    comments.push(leading_comment.to_owned());
+        Self { comments: self.leading_run(line, capture).to_vec() }
+    }
+
+    /// Collapses the leading comments of `line` into a single [`Comment`].
+    #[must_use]
+    pub fn leading_doc(
+        &self,
+        line: u64,
+        capture: LeadingCommentCapture,
+        flatten: MultiFlatten<'_>,
+    ) -> Option<Comment> {
+        collapse(self.leading_run(line, capture), flatten)
+    }
+
+    /// Returns the run of comments that lead `line`, nearest one last.
+    ///
+    /// The run covers the block of lines directly above `line`, so comments
+    /// sharing a line are kept together, and it stops where `capture` says.
+    fn leading_run(&self, line: u64, capture: LeadingCommentCapture) -> &[Comment] {
+        let end = self.comments.partition_point(|c| c.span().start().line() < line);
+        let Some(mut index) = end.checked_sub(1) else { return &[] };
+        if self.comments[index].span().end().line() + 1 != line {
+            return &[];
+        }
+        if capture == LeadingCommentCapture::SingleNearest {
+            return &self.comments[index..end];
+        }
+        let mut seen_multiline = *self.comments[index].kind() == CommentKind::MultiLine;
+        while index > 0 {
+            let candidate = &self.comments[index - 1];
+            let accepted_line = self.comments[index].span().start().line();
+            let candidate_end = candidate.span().end().line();
+            let same_line = candidate_end == accepted_line;
+            if !same_line && candidate_end + 1 != accepted_line {
+                break;
+            }
+            if !same_line
+                && capture == LeadingCommentCapture::AllSingleOneMulti
+                && *candidate.kind() == CommentKind::MultiLine
+            {
+                if seen_multiline {
                     break;
                 }
-                LeadingCommentCapture::AllLeading => comments.push(leading_comment.to_owned()),
-                LeadingCommentCapture::AllSingleOneMulti => match leading_comment.kind() {
-                    CommentKind::MultiLine if seen_multiline => break,
-                    CommentKind::MultiLine => {
-                        seen_multiline = true;
-                        comments.push(leading_comment.to_owned());
-                    }
-                    CommentKind::SingleLine => comments.push(leading_comment.to_owned()),
-                },
+                seen_multiline = true;
             }
-            current_line = leading_comment.span().start().line();
+            index -= 1;
         }
-        comments.reverse();
-        Self::new(comments)
+        &self.comments[index..end]
     }
 
     /// Collapse this collection of comments and separate each comment with `\n` as a single [`Comment`].
     #[must_use]
     pub fn collapse_comments(self, flatten: MultiFlatten) -> Option<Comment> {
-        let mut iter = self.comments.into_iter();
-        let first = iter.next()?;
-
-        let Some(second) = iter.next() else {
-            let text = first.text();
-            return Some(Comment::new(
-                flatten_lines(text, flatten),
-                first.kind().to_owned(),
-                first.span().to_owned(),
-            ));
-        };
-
-        let start = *first.span().start();
-
-        let mut text = first.text().to_owned();
-        text.push('\n');
-        text.push_str(second.text());
-
-        let mut end = *second.span().end();
-
-        for c in iter {
-            text.push('\n');
-            text.push_str(c.text());
-            end = *c.span().end();
-        }
-
-        Some(Comment::new(
-            flatten_lines(&text, flatten),
-            CommentKind::MultiLine,
-            Span::new(start, end),
-        ))
+        collapse(&self.comments, flatten)
     }
+}
+
+/// Joins `comments` into one [`Comment`] spanning all of them.
+fn collapse(comments: &[Comment], flatten: MultiFlatten) -> Option<Comment> {
+    let (first, rest) = comments.split_first()?;
+    let Some((_, _)) = rest.split_first() else {
+        return Some(Comment::new(
+            flatten_lines(first.text(), flatten),
+            first.kind().clone(),
+            *first.span(),
+        ));
+    };
+
+    let mut text = first.text().to_owned();
+    let mut end = *first.span().end();
+    for comment in rest {
+        text.push('\n');
+        text.push_str(comment.text());
+        end = *comment.span().end();
+    }
+
+    Some(Comment::new(
+        flatten_lines(&text, flatten),
+        CommentKind::MultiLine,
+        Span::new(*first.span().start(), end),
+    ))
 }
 
 fn flatten_lines(lines: &str, flatten: MultiFlatten) -> String {
@@ -876,6 +907,27 @@ mod tests {
         assert_eq!(comment.kind, kind);
         assert_eq!(comment.span.start.line, 1);
         assert_eq!(comment.span.end.line, 2);
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn every_comment_on_a_captured_line_is_captured() {
+        let comments = Comments::scan_comments("/* one */ /* two */\n")
+            .unwrap_or_else(|error| panic!("scan failed: {error}"));
+        let captured = comments.leading_comments(2, LeadingCommentCapture::AllLeading);
+        assert_eq!(
+            captured.comments().iter().map(|c| c.text().to_owned()).collect::<Vec<_>>(),
+            vec!["one".to_owned(), "two".to_owned()]
+        );
+        assert_eq!(
+            comments
+                .leading_comments(2, LeadingCommentCapture::SingleNearest)
+                .comments()
+                .iter()
+                .map(|c| c.text().to_owned())
+                .collect::<Vec<_>>(),
+            vec!["two".to_owned()]
+        );
     }
 
     #[cfg(feature = "std")]

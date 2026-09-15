@@ -7,7 +7,7 @@ use sqlparser::ast::{Ident, ObjectName, ObjectNamePart, Spanned, Statement};
 
 use crate::{
     ast::ParsedSqlSource,
-    comments::{Comments, LeadingCommentCapture, MultiFlatten},
+    comments::{Comment, Comments, LeadingCommentCapture, MultiFlatten},
     error::DocError,
 };
 
@@ -247,42 +247,43 @@ impl SqlFileDoc {
         flatten: MultiFlatten,
     ) -> Result<Self, DocError> {
         let mut tables = Vec::new();
+        let mut claimed_line = None;
         for statement in source.statements() {
-            #[allow(clippy::single_match)]
-            match statement {
-                Statement::CreateTable(table) => {
-                    let table_start = table.span().start.line;
-                    let mut column_docs = Vec::new();
-                    for column in &table.columns {
-                        let column_start = column.span().start.line;
-                        let column_leading = comments
-                            .leading_comments(column_start, capture)
-                            .collapse_comments(flatten);
-                        let column_name = column.name.value.clone();
-                        let column_doc = match column_leading {
-                            Some(col_comment) => {
-                                ColumnDoc::new(column_name, Some(col_comment.text().to_owned()))
-                            }
-                            None => ColumnDoc::new(column_name, None),
-                        };
-                        column_docs.push(column_doc);
-                    }
-                    let table_leading =
-                        comments.leading_comments(table_start, capture).collapse_comments(flatten);
-                    let (schema, name) = schema_and_table(&table.name)?;
-                    let table_doc = TableDoc::new(
-                        schema,
-                        name,
-                        table_leading.as_ref().map(|c| c.text().to_owned()),
-                        column_docs,
-                        #[cfg(feature = "std")]
-                        source.path_into_path_buf(),
-                    );
-                    tables.push(table_doc);
-                }
-                // can add support for other types of statements below
-                _ => {}
+            let statement_start = statement.span().start.line;
+            let leads_statement = claimed_line != Some(statement_start);
+            claimed_line = Some(statement_start);
+            let Statement::CreateTable(table) = statement else { continue };
+
+            let mut previous_line = statement_start;
+            let mut column_docs = Vec::with_capacity(table.columns.len());
+            for column in &table.columns {
+                let column_start = column.span().start.line;
+                let column_doc = if column_start > previous_line {
+                    comments.leading_doc(column_start, capture, flatten)
+                } else {
+                    None
+                };
+                previous_line = column_start;
+                column_docs.push(ColumnDoc::new(
+                    column.name.value.clone(),
+                    column_doc.map(Comment::into_text),
+                ));
             }
+
+            let table_doc = if leads_statement {
+                comments.leading_doc(statement_start, capture, flatten)
+            } else {
+                None
+            };
+            let (schema, name) = schema_and_table(&table.name)?;
+            tables.push(TableDoc::new(
+                schema,
+                name,
+                table_doc.map(Comment::into_text),
+                column_docs,
+                #[cfg(feature = "std")]
+                source.path_into_path_buf(),
+            ));
         }
 
         Ok(Self { tables })
