@@ -46,7 +46,7 @@ impl Default for Location {
     }
 }
 
-/// Represents a start/end span (inclusive/exclusive as used by this crate) for a comment in a file.
+/// Location of a comment, from its opening marker to one column past its last character.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Span {
     start: Location,
@@ -215,125 +215,54 @@ impl Comments {
     /// - Will return [`CommentError::UnterminatedMultiLineComment`] if a
     ///   multiline comment doesn't end before `EOF`
     pub fn parse_all_comments_from_file(file: &ParsedSqlSource) -> CommentResult<Self> {
-        let src = file.content();
-        let comments = Self::scan_comments(src)?;
-        Ok(comments)
+        Self::scan_comments_with(file.content(), file.string_escapes())
     }
 
-    /// Scans the raw file and collects all comments
+    /// Scans the raw file and collects every comment that is not inline, with
+    /// quotes escaped the standard way, by doubling them.
+    ///
+    /// Comment markers inside string literals, quoted identifiers and dollar
+    /// quoted strings are text, block comments nest, and a comment preceded by
+    /// code on its own line is inline and therefore dropped.
     ///
     /// # Parameters
     /// - `src` which is the `SQL` file content as a [`str`]
     ///
     /// # Errors
-    /// - `UnmatchedMultilineCommentStart` : will return error if unable to find
-    ///   a starting `/*` for a multiline comment
-    /// - `UnterminatedMultiLineComment` : will return error if there is an
-    ///   unterminated multiline comment, found at EOF
+    /// - `UnmatchedMultilineCommentStart` : will return error if a `*/` appears
+    ///   outside of a block comment
+    /// - `UnterminatedMultiLineComment` : will return error if a block comment
+    ///   is still open at `EOF`
     pub fn scan_comments(src: &str) -> CommentResult<Self> {
-        let mut comments = Vec::new();
+        Self::scan_comments_with(src, StringEscapes::Doubled)
+    }
 
-        let mut start_line = 1u64;
-        let mut start_col = 1u64;
-
-        let mut col;
-
-        let mut in_single = false;
-        let mut in_multi = false;
-
-        let mut buf = String::new();
-
-        for (line_num, line) in (1u64..).zip(src.lines()) {
-            col = 1;
-            let mut chars = line.chars().peekable();
-            while let Some(c) = chars.next() {
-                match (in_single, in_multi, c) {
-                    (false, false, '-') => {
-                        if chars.peek().copied() == Some('-') {
-                            chars.next();
-                            in_single = true;
-                            start_line = line_num;
-                            start_col = col;
-                            buf.clear();
-                            col += 1;
-                        }
-                    }
-                    (false, false, '/') => {
-                        if chars.peek().copied() == Some('*') {
-                            chars.next();
-                            in_multi = true;
-                            start_line = line_num;
-                            start_col = col;
-                            buf.clear();
-                            col += 1;
-                        }
-                    }
-                    (false, false, '*') => {
-                        if chars.peek().copied() == Some('/') {
-                            let loc = Location::new(line_num, col);
-                            return Err(CommentError::UnmatchedMultilineCommentStart {
-                                location: loc,
-                            });
-                        }
-                    }
-                    (false, true, '*') => {
-                        if chars.peek().copied() == Some('/') {
-                            chars.next();
-                            let end_loc = Location::new(line_num, col + 1);
-                            let normalized_comment = buf
-                                .lines()
-                                .enumerate()
-                                .map(|(i, line)| match i {
-                                    0 => line.trim().to_owned(),
-                                    _ => "\n".to_owned() + line.trim(),
-                                })
-                                .collect();
-                            comments.push(Comment::new(
-                                normalized_comment,
-                                CommentKind::MultiLine,
-                                Span::new(
-                                    Location { line: start_line, column: start_col },
-                                    end_loc,
-                                ),
-                            ));
-                            in_multi = false;
-                            buf.clear();
-                            col += 1;
-                        } else {
-                            buf.push('*');
-                        }
-                    }
-                    (false, true, ch) | (true, false, ch) => {
-                        buf.push(ch);
-                    }
-                    (false, false, _) => {}
-                    (true, true, _) => {
-                        unreachable!("should not be possible to be in multiline and single line")
-                    }
-                }
-                col += 1;
+    /// Scans the raw file the way `escapes` says its string literals are written.
+    ///
+    /// # Parameters
+    /// - `src` which is the `SQL` file content as a [`str`]
+    /// - `escapes` the [`StringEscapes`] of the dialect the source is written in
+    ///
+    /// # Errors
+    /// - `UnmatchedMultilineCommentStart` : will return error if a `*/` appears
+    ///   outside of a block comment
+    /// - `UnterminatedMultiLineComment` : will return error if a block comment
+    ///   is still open at `EOF`
+    pub fn scan_comments_with(src: &str, escapes: StringEscapes) -> CommentResult<Self> {
+        let mut scanner = Scanner::new(src, escapes);
+        let mut chars = src.char_indices().peekable();
+        while let Some((offset, character)) = chars.next() {
+            let peeked = chars.peek().map(|&(_, next)| next);
+            if character == '\r' && peeked == Some('\n') {
+                continue;
             }
-            if in_single {
-                in_single = false;
-                let end_loc = Location::new(line_num, col);
-                comments.push(Comment::new(
-                    buf.trim().to_owned(),
-                    CommentKind::SingleLine,
-                    Span::new(Location { line: start_line, column: start_col }, end_loc),
-                ));
-                buf.clear();
-            } else if in_multi {
-                buf.push('\n');
+            if character == '\n' {
+                scanner.newline();
+            } else {
+                scanner.step(offset, character, peeked, &mut chars)?;
             }
         }
-        // EOF: close any open comments
-        if in_multi {
-            return Err(CommentError::UnterminatedMultiLineComment {
-                start: Location { line: start_line, column: start_col },
-            });
-        }
-
-        Ok(Self { comments })
+        scanner.finish()
     }
 
     /// Getter method for retrieving the Vec of [`Comment`]
@@ -438,6 +367,306 @@ fn flatten_lines(lines: &str, flatten: MultiFlatten) -> String {
     out
 }
 
+/// Lexer state while scanning a source for comments.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ScanState<'a> {
+    Code,
+    Single,
+    Block,
+    Quoted(char),
+    DollarQuoted(&'a str),
+}
+
+/// Character iterator used by [`Scanner`].
+type Chars<'a> = core::iter::Peekable<core::str::CharIndices<'a>>;
+
+/// Collects the comments of one source, tracking where the scan currently is.
+struct Scanner<'a> {
+    src: &'a str,
+    escapes: StringEscapes,
+    quote_escapes: StringEscapes,
+    previous_code: Option<char>,
+    comments: Vec<Comment>,
+    state: ScanState<'a>,
+    buf: String,
+    line: u64,
+    col: u64,
+    start: Location,
+    depth: u32,
+    inline: bool,
+    code_before: bool,
+}
+
+impl<'a> Scanner<'a> {
+    /// Starts a scan at the first character of `src`.
+    fn new(src: &'a str, escapes: StringEscapes) -> Self {
+        Self {
+            src,
+            escapes,
+            quote_escapes: escapes,
+            previous_code: None,
+            comments: Vec::new(),
+            state: ScanState::Code,
+            buf: String::new(),
+            line: 1,
+            col: 1,
+            start: Location::default(),
+            depth: 0,
+            inline: false,
+            code_before: false,
+        }
+    }
+
+    /// Ends the current line, closing a single line comment with it.
+    fn newline(&mut self) {
+        match self.state {
+            ScanState::Single => self.close_single(),
+            ScanState::Block => self.buf.push('\n'),
+            ScanState::Code | ScanState::Quoted(_) | ScanState::DollarQuoted(_) => {}
+        }
+        self.line += 1;
+        self.col = 1;
+        self.code_before = false;
+        self.previous_code = None;
+    }
+
+    /// Consumes one character in the current state.
+    fn step(
+        &mut self,
+        offset: usize,
+        character: char,
+        peeked: Option<char>,
+        chars: &mut Chars<'a>,
+    ) -> CommentResult<()> {
+        match self.state {
+            ScanState::Code => return self.code(offset, character, peeked, chars),
+            ScanState::Single => {
+                self.buf.push(character);
+                self.col += 1;
+            }
+            ScanState::Block => self.block(character, peeked, chars),
+            ScanState::Quoted(delimiter) => self.quoted(delimiter, character, peeked, chars),
+            ScanState::DollarQuoted(tag) => self.dollar_quoted(tag, offset, character, chars),
+        }
+        Ok(())
+    }
+
+    /// Consumes one character outside of comments and quoted text.
+    fn code(
+        &mut self,
+        offset: usize,
+        character: char,
+        peeked: Option<char>,
+        chars: &mut Chars<'a>,
+    ) -> CommentResult<()> {
+        match character {
+            '-' if peeked == Some('-') => {
+                chars.next();
+                self.open(ScanState::Single);
+            }
+            '/' if peeked == Some('*') => {
+                chars.next();
+                self.depth = 1;
+                self.open(ScanState::Block);
+            }
+            '*' if peeked == Some('/') => {
+                return Err(CommentError::UnmatchedMultilineCommentStart {
+                    location: Location::new(self.line, self.col),
+                });
+            }
+            '\'' | '"' | '`' => {
+                self.quote_escapes =
+                    if character == '\'' && matches!(self.previous_code, Some('e' | 'E')) {
+                        StringEscapes::Backslash
+                    } else {
+                        self.escapes
+                    };
+                self.state = ScanState::Quoted(character);
+                self.code_before = true;
+                self.col += 1;
+            }
+            '$' => {
+                if let Some(tag) = dollar_tag(self.src.get(offset..).unwrap_or_default()) {
+                    self.state = ScanState::DollarQuoted(tag);
+                    self.skip_tag(tag, chars);
+                }
+                self.code_before = true;
+                self.col += 1;
+            }
+            _ => {
+                self.code_before |= !character.is_whitespace();
+                self.col += 1;
+            }
+        }
+        self.previous_code = Some(character);
+        Ok(())
+    }
+
+    /// Consumes one character inside a block comment.
+    fn block(&mut self, character: char, peeked: Option<char>, chars: &mut Chars<'a>) {
+        match character {
+            '/' if peeked == Some('*') => {
+                chars.next();
+                self.depth += 1;
+                self.buf.push_str("/*");
+                self.col += 2;
+            }
+            '*' if peeked == Some('/') => {
+                chars.next();
+                self.depth -= 1;
+                if self.depth == 0 {
+                    self.close_block();
+                } else {
+                    self.buf.push_str("*/");
+                }
+                self.col += 2;
+            }
+            _ => {
+                self.buf.push(character);
+                self.col += 1;
+            }
+        }
+    }
+
+    /// Consumes one character inside a string literal or quoted identifier.
+    fn quoted(
+        &mut self,
+        delimiter: char,
+        character: char,
+        peeked: Option<char>,
+        chars: &mut Chars<'a>,
+    ) {
+        if character == '\\' && delimiter != '`' && self.quote_escapes == StringEscapes::Backslash {
+            match chars.next() {
+                Some((_, '\n')) => {
+                    self.col += 1;
+                    self.newline();
+                }
+                Some(_) => self.col += 2,
+                None => self.col += 1,
+            }
+            return;
+        }
+        if character == delimiter {
+            if peeked == Some(delimiter) {
+                chars.next();
+                self.col += 1;
+            } else {
+                self.state = ScanState::Code;
+                self.code_before = true;
+            }
+        }
+        self.col += 1;
+    }
+
+    /// Consumes one character inside a dollar quoted string.
+    fn dollar_quoted(&mut self, tag: &str, offset: usize, character: char, chars: &mut Chars<'a>) {
+        if character == '$' && self.src.get(offset..).is_some_and(|rest| rest.starts_with(tag)) {
+            self.state = ScanState::Code;
+            self.code_before = true;
+            self.skip_tag(tag, chars);
+        }
+        self.col += 1;
+    }
+
+    /// Opens a comment at the current location.
+    fn open(&mut self, state: ScanState<'a>) {
+        self.state = state;
+        self.start = Location::new(self.line, self.col);
+        self.inline = self.code_before;
+        self.buf.clear();
+        self.col += 2;
+    }
+
+    /// Records the single line comment that ends here.
+    fn close_single(&mut self) {
+        if !self.inline {
+            self.comments.push(Comment::new(
+                self.buf.trim().to_owned(),
+                CommentKind::SingleLine,
+                Span::new(self.start, Location::new(self.line, self.col)),
+            ));
+        }
+        self.buf.clear();
+        self.state = ScanState::Code;
+    }
+
+    /// Records the block comment whose terminator starts at the current column.
+    fn close_block(&mut self) {
+        if !self.inline {
+            self.comments.push(Comment::new(
+                normalize_block(&self.buf),
+                CommentKind::MultiLine,
+                Span::new(self.start, Location::new(self.line, self.col + 2)),
+            ));
+        }
+        self.buf.clear();
+        self.state = ScanState::Code;
+    }
+
+    /// Consumes the remaining characters of a dollar quote tag.
+    fn skip_tag(&mut self, tag: &str, chars: &mut Chars<'a>) {
+        for _ in 1..tag.chars().count() {
+            chars.next();
+            self.col += 1;
+        }
+    }
+
+    /// Finishes the scan at `EOF`.
+    fn finish(mut self) -> CommentResult<Comments> {
+        match self.state {
+            ScanState::Single => self.close_single(),
+            ScanState::Block => {
+                return Err(CommentError::UnterminatedMultiLineComment { start: self.start });
+            }
+            ScanState::Code | ScanState::Quoted(_) | ScanState::DollarQuoted(_) => {}
+        }
+        Ok(Comments { comments: self.comments })
+    }
+}
+
+/// Returns the dollar quote tag, delimiters included, that `rest` opens with.
+///
+/// A tag follows the rules of an unquoted identifier, so it never starts with a
+/// digit, which keeps positional parameters such as `$1` out of the scan.
+fn dollar_tag(rest: &str) -> Option<&str> {
+    let mut end = 1;
+    for (position, character) in rest.get(1..)?.char_indices() {
+        if character == '$' {
+            return rest.get(..=end);
+        }
+        let identifier_start = character.is_alphabetic() || character == '_';
+        let identifier_part = identifier_start || character.is_numeric();
+        if position == 0 && !identifier_start || !identifier_part {
+            return None;
+        }
+        end += character.len_utf8();
+    }
+    None
+}
+
+/// Trims every line of a block comment body.
+fn normalize_block(body: &str) -> String {
+    let mut out = String::with_capacity(body.len());
+    for (index, line) in body.lines().enumerate() {
+        if index > 0 {
+            out.push('\n');
+        }
+        out.push_str(line.trim());
+    }
+    out
+}
+
+/// How the source being scanned escapes a quote inside a string literal.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum StringEscapes {
+    /// Standard SQL, where a quote is escaped by doubling it.
+    #[default]
+    Doubled,
+    /// Dialects such as `MySQL`, where a backslash escapes the character after it.
+    Backslash,
+}
+
 /// Controls how leading comments are captured for a statement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub enum LeadingCommentCapture {
@@ -476,7 +705,119 @@ mod tests {
         vec::Vec,
     };
 
-    use crate::comments::{Comment, CommentError, CommentKind, Comments, Location, Span};
+    use crate::comments::{
+        Comment, CommentError, CommentKind, Comments, LeadingCommentCapture, Location, Span,
+        StringEscapes,
+    };
+
+    fn scanned_texts(src: &str) -> Vec<String> {
+        Comments::scan_comments(src)
+            .unwrap_or_else(|error| panic!("scan failed: {error}"))
+            .comments()
+            .iter()
+            .map(|comment| comment.text().to_owned())
+            .collect()
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn comment_markers_inside_string_literals_are_text() {
+        assert!(scanned_texts("SELECT 'a -- b', \"c /* d\", `e -- f`;").is_empty());
+        assert_eq!(scanned_texts("SELECT 'it''s -- fine';\n-- real\n"), vec!["real".to_owned()]);
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn backslash_escaped_quote_does_not_swallow_later_comments() {
+        let src = "SELECT 'a\\'b';\n-- real\n";
+        assert_eq!(
+            Comments::scan_comments_with(src, StringEscapes::Backslash)
+                .unwrap_or_else(|error| panic!("scan failed: {error}"))
+                .comments()
+                .iter()
+                .map(|comment| comment.text().to_owned())
+                .collect::<Vec<_>>(),
+            vec!["real".to_owned()]
+        );
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn comment_markers_inside_dollar_quotes_are_text() {
+        let src = "CREATE FUNCTION f() AS $body$ -- inner\nSELECT 1 $body$;\n-- real\n";
+        assert_eq!(scanned_texts(src), vec!["real".to_owned()]);
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn comment_after_a_closing_dollar_quote_is_inline() {
+        let src = "CREATE FUNCTION f() AS $body$\nSELECT 1;\n$body$ -- after\n-- real\n";
+        assert_eq!(scanned_texts(src), vec!["real".to_owned()]);
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn an_escape_string_literal_escapes_with_a_backslash() {
+        assert_eq!(
+            scanned_texts("SELECT E'a\\'b';\n-- real\n"),
+            vec!["real".to_owned()],
+            "an E prefixed literal takes backslash escapes in every dialect"
+        );
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn a_positional_parameter_does_not_open_a_dollar_quote() {
+        assert_eq!(
+            scanned_texts("SELECT $1$ FROM t;\n-- real\n"),
+            vec!["real".to_owned()],
+            "a tag may not start with a digit"
+        );
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn block_comments_nest() {
+        assert_eq!(
+            scanned_texts("/* outer /* inner */ still outer */\n"),
+            vec!["outer /* inner */ still outer".to_owned()]
+        );
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn inline_comments_are_dropped() {
+        assert!(scanned_texts("SELECT 1; -- trailing\n").is_empty());
+        assert!(scanned_texts("CREATE TABLE t ( /* trailing */\n").is_empty());
+        assert_eq!(scanned_texts("  -- indented\n"), vec!["indented".to_owned()]);
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn comment_spans_end_one_column_past_the_comment() {
+        let single = Comments::scan_comments("-- ab\n")
+            .unwrap_or_else(|error| panic!("scan failed: {error}"));
+        assert_eq!(
+            single.comments()[0].span(),
+            &Span::new(Location::new(1, 1), Location::new(1, 6))
+        );
+
+        let block = Comments::scan_comments("/* ab */\n")
+            .unwrap_or_else(|error| panic!("scan failed: {error}"));
+        assert_eq!(
+            block.comments()[0].span(),
+            &Span::new(Location::new(1, 1), Location::new(1, 9))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    fn unterminated_block_comment_reports_its_start() {
+        assert_eq!(
+            Comments::scan_comments("SELECT 1;\n  /* open"),
+            Err(CommentError::UnterminatedMultiLineComment { start: Location::new(2, 3) })
+        );
+    }
 
     #[test]
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
@@ -761,9 +1102,7 @@ CREATE TABLE posts (
         &[
             "interstitial Comment above statements (should be ignored)",
             "Users table stores user account information",
-            "users interstitial comment\n(should be ignored)",
             "Primary key",
-            "Id comment that is interstitial (should be ignored)",
             "Username for login",
             "Email address",
             "When the user registered",
@@ -903,8 +1242,6 @@ CREATE TABLE posts (
             assert_eq!(comment.span().end(), comment_vec[i].span().end());
         }
     }
-
-    use crate::comments::LeadingCommentCapture;
 
     fn texts(v: &Comments) -> Vec<String> {
         v.comments().iter().map(|c| c.text().to_owned()).collect()

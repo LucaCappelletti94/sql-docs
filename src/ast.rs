@@ -10,13 +10,14 @@ use sqlparser::{
     parser::{Parser, ParserError},
 };
 
-use crate::source::SqlSource;
+use crate::{comments::StringEscapes, source::SqlSource};
 
 /// A single SQL Source (such as a file) plus all [`Statement`].
 #[derive(Debug)]
 pub struct ParsedSqlSource {
     source: SqlSource,
     statements: Vec<Statement>,
+    escapes: StringEscapes,
 }
 
 #[cfg(feature = "std")]
@@ -49,8 +50,20 @@ impl ParsedSqlSource {
     where
         D: Dialect + Default,
     {
-        let statements = Parser::parse_sql(&D::default(), source.content())?;
-        Ok(Self { source, statements })
+        let dialect = D::default();
+        let statements = Parser::parse_sql(&dialect, source.content())?;
+        let escapes = if dialect.supports_string_literal_backslash_escape() {
+            StringEscapes::Backslash
+        } else {
+            StringEscapes::Doubled
+        };
+        Ok(Self { source, statements, escapes })
+    }
+
+    /// Getter for how the parsing dialect escapes quotes in string literals
+    #[must_use]
+    pub const fn string_escapes(&self) -> StringEscapes {
+        self.escapes
     }
 
     /// Getter method for returning the [`SqlSource`]

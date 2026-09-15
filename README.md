@@ -143,7 +143,8 @@ This makes it well-suited for:
 
 ## Design Notes
 
-* Inline and interstitial comments are intentionally ignored.
+* Inline and interstitial comments are intentionally ignored, and a comment preceded by code on its own line is inline.
+* Comment markers inside string literals, quoted identifiers and dollar quoted strings are text, and block comments nest.
 * Comment attachment is line-based and deterministic.
 * One SQL file may define multiple tables.
 * No database connection is required.
