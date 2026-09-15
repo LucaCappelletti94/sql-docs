@@ -53,7 +53,7 @@ impl SqlFiles {
     ///
     /// Returns an [`io::Error`] if directory traversal fails.
     pub fn new<P: AsRef<Path>>(path: P, deny_list: &[String]) -> io::Result<Self> {
-        let recursive_scan = recursive_dir_scan(path.as_ref())?;
+        let recursive_scan = scan_sql_files(path.as_ref())?;
         let mut allow_list: Vec<PathBuf> = {
             let deny = DenyList::new(deny_list);
             recursive_scan.into_iter().filter(|p| !deny.deny_files().contains(p)).collect()
@@ -62,30 +62,34 @@ impl SqlFiles {
         Ok(Self { sql_files: allow_list })
     }
 
-    /// Returns discovered `.sql` files in discovery order (filesystem-dependent).
+    /// Returns discovered `.sql` files sorted by path.
     #[must_use]
     pub fn sql_files(&self) -> Vec<PathBuf> {
-        let mut files: Vec<PathBuf> =
-            self.sql_files.iter().map(std::borrow::ToOwned::to_owned).collect();
-        files.sort();
-        files
+        self.sql_files.clone()
     }
 }
 
-/// Adds `.sql` files to a Vec of [`PathBuf`] recursively.
-fn recursive_dir_scan(path: &Path) -> io::Result<Vec<PathBuf>> {
+/// Collects `.sql` files under `path`, without following directory symlinks.
+fn scan_sql_files(path: &Path) -> io::Result<Vec<PathBuf>> {
     let mut sql_files = Vec::new();
-    for entry in fs::read_dir(path)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() && path.extension().and_then(|ext| ext.to_str()) == Some("sql") {
-            sql_files.push(path);
-        } else if path.is_dir() {
-            let nested = recursive_dir_scan(&path)?;
-            sql_files.extend(nested);
+    let mut directories = vec![path.to_path_buf()];
+    while let Some(directory) = directories.pop() {
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.file_type()?.is_dir() {
+                directories.push(path);
+            } else if has_sql_extension(&path) && path.is_file() {
+                sql_files.push(path);
+            }
         }
     }
     Ok(sql_files)
+}
+
+/// Whether `path` ends in a `.sql` extension, ignoring case.
+fn has_sql_extension(path: &Path) -> bool {
+    path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("sql"))
 }
 
 impl From<SqlFiles> for Vec<PathBuf> {
@@ -188,7 +192,7 @@ mod tests {
         fs::File::create(&file2)?;
         fs::File::create(&non_sql1)?;
         fs::File::create(&non_sql2)?;
-        let mut found = recursive_dir_scan(base.as_path())?;
+        let mut found = scan_sql_files(base.as_path())?;
         found.sort();
         let mut expected = vec![file1, file2];
         expected.sort();
@@ -214,7 +218,7 @@ mod tests {
         fs::File::create(&non_sql2)?;
 
         let bad_path = Path::new("bad_path");
-        let bad_dir_scan = recursive_dir_scan(bad_path);
+        let bad_dir_scan = scan_sql_files(bad_path);
         assert!(bad_dir_scan.is_err());
 
         let _ = fs::remove_dir_all(&base);
@@ -308,6 +312,33 @@ mod tests {
         let expected: Vec<PathBuf> = sql_file_list.sql_files();
         let got: Vec<PathBuf> = Vec::from(sql_file_list);
         assert_eq!(got, expected);
+        let _ = fs::remove_dir_all(&base);
+        Ok(())
+    }
+
+    #[test]
+    fn test_uppercase_sql_extension_is_discovered() -> Result<(), Box<dyn std::error::Error>> {
+        let base = env::temp_dir().join("uppercase_sql_extension");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base)?;
+        let shouting = base.join("schema.SQL");
+        fs::File::create(&shouting)?;
+        assert_eq!(SqlFiles::new(&base, &[])?.sql_files(), vec![shouting]);
+        let _ = fs::remove_dir_all(&base);
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_symlinked_directory_cycle_terminates() -> Result<(), Box<dyn std::error::Error>> {
+        let base = env::temp_dir().join("symlinked_directory_cycle");
+        let _ = fs::remove_dir_all(&base);
+        let nested = base.join("nested");
+        fs::create_dir_all(&nested)?;
+        let file = nested.join("one.sql");
+        fs::File::create(&file)?;
+        std::os::unix::fs::symlink(&base, nested.join("loop"))?;
+        assert_eq!(SqlFiles::new(&base, &[])?.sql_files(), vec![file]);
         let _ = fs::remove_dir_all(&base);
         Ok(())
     }

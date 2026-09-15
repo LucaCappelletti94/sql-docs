@@ -321,7 +321,7 @@ impl SqlDocBuilder<'_> {
         D: Dialect + Default,
     {
         let docs: Vec<SqlFileDoc> = match &self.source {
-            SqlFileDocSource::Dir(path) => generate_docs_from_dir::<_, _, D>(
+            SqlFileDocSource::Dir(path) => generate_docs_from_dir::<_, D>(
                 path,
                 &self.deny,
                 self.leading_type,
@@ -436,16 +436,16 @@ impl<'a> SqlDocBuilder<'a> {
 }
 
 #[cfg(feature = "std")]
-fn generate_docs_from_dir<P: AsRef<std::path::Path>, S: AsRef<str>, D: Dialect + Default>(
+fn generate_docs_from_dir<P: AsRef<std::path::Path>, D: Dialect + Default>(
     source: P,
-    deny: &[S],
+    deny: &[String],
     capture: LeadingCommentCapture,
     flatten: MultiFlatten,
 ) -> Result<Vec<SqlFileDoc>, DocError> {
-    let deny_list: Vec<String> = deny.iter().map(|file| file.as_ref().to_owned()).collect();
-    let file_set = crate::files::SqlFiles::new(source, &deny_list)?;
-    let mut sql_docs = Vec::new();
-    for file in file_set.sql_files() {
+    let file_set = crate::files::SqlFiles::new(source, deny)?;
+    let files = Vec::from(file_set);
+    let mut sql_docs = Vec::with_capacity(files.len());
+    for file in files {
         let docs = generate_docs_from_file::<_, D>(file, capture, flatten)?;
         sql_docs.push(docs);
     }
