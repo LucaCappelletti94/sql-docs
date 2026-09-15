@@ -108,6 +108,18 @@ jobs:
     - name: Run clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
 
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install the declared rust-version
+      uses: dtolnay/rust-toolchain@1.88.0
+    - name: Check both feature sets
+      run: |
+        cargo check
+        cargo check --no-default-features
+
   doc:
     name: Documentation
     runs-on: ubuntu-latest
