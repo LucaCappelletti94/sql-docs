@@ -33,7 +33,7 @@ CREATE TABLE users (
 );
 ```
 A rudimentary implementation can be generated with:
-```rust,no_run
+```rust
 # #[cfg(not(feature = "std"))]
 # fn main() {}
 # #[cfg(feature = "std")]
