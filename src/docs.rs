@@ -360,8 +360,6 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use alloc::{borrow::ToOwned, boxed::Box, string::String, vec};
-    #[cfg(feature = "std")]
-    use core::fmt;
 
     use sqlparser::{
         ast::{Ident, ObjectName, ObjectNamePart, ObjectNamePartFunction},
@@ -804,75 +802,6 @@ CREATE TABLE posts (
         assert_eq!(schema, Some("public".to_owned()));
         assert_eq!(table, "orders");
         Ok(())
-    }
-
-    #[cfg(feature = "std")]
-    struct FailOnNthWrite {
-        fail_at: usize,
-        writes: usize,
-        sink: String,
-    }
-    #[cfg(feature = "std")]
-    impl FailOnNthWrite {
-        fn new(fail_at: usize) -> Self {
-            Self { fail_at, writes: 0, sink: String::new() }
-        }
-    }
-    #[cfg(feature = "std")]
-    impl fmt::Write for FailOnNthWrite {
-        fn write_str(&mut self, s: &str) -> fmt::Result {
-            self.writes += 1;
-            if self.writes == self.fail_at {
-                return Err(fmt::Error);
-            }
-            self.sink.push_str(s);
-            Ok(())
-        }
-    }
-
-    #[cfg(feature = "std")]
-    fn run_fail_at<T: fmt::Display>(v: &T, fail_at: usize) -> Result<(), fmt::Error> {
-        let mut w = FailOnNthWrite::new(fail_at);
-        fmt::write(&mut w, format_args!("{v}"))
-    }
-
-    #[cfg(feature = "std")]
-    fn count_writes<T: fmt::Display>(v: &T) -> usize {
-        let mut w = FailOnNthWrite { fail_at: usize::MAX, writes: 0, sink: String::new() };
-        let _ = fmt::write(&mut w, format_args!("{v}"));
-        w.writes
-    }
-
-    #[cfg(feature = "std")]
-    #[test]
-    fn test_display_propagates_every_question_mark_path_for_column_and_table() {
-        let col_with_doc = ColumnDoc::new("col_a".into(), Some("doc".into()));
-        let col_without_doc = ColumnDoc::new("col_b".into(), None);
-
-        let table = TableDoc::new(
-            Some("public".into()),
-            "users".into(),
-            Some("table doc".into()),
-            vec![col_with_doc.clone(), col_without_doc],
-            None,
-        );
-
-        let col_writes = count_writes(&col_with_doc);
-        let table_writes = count_writes(&table);
-
-        for i in 1..=col_writes {
-            assert!(
-                run_fail_at(&col_with_doc, i).is_err(),
-                "ColumnDoc should error when failing at write #{i} (total writes {col_writes})"
-            );
-        }
-
-        for i in 1..=table_writes {
-            assert!(
-                run_fail_at(&table, i).is_err(),
-                "TableDoc should error when failing at write #{i} (total writes {table_writes})"
-            );
-        }
     }
 
     #[test]

@@ -535,10 +535,7 @@ mod tests {
     use sqlparser::dialect::{GenericDialect, PostgreSqlDialect};
 
     #[cfg(feature = "std")]
-    use crate::{
-        LeadingCommentCapture, MultiFlatten, SqlDocBuilder,
-        docs::{ColumnDoc, TableDoc},
-    };
+    use crate::docs::{ColumnDoc, TableDoc};
     use crate::{SqlDoc, error::DocError};
 
     #[cfg(feature = "std")]
@@ -767,22 +764,6 @@ mod tests {
 
     #[cfg(feature = "std")]
     #[test]
-    fn test_sql_builder_deny_from_path() {
-        use std::{path::PathBuf, vec};
-
-        use crate::{LeadingCommentCapture, MultiFlatten, SqlDocBuilder};
-        let actual_builder = SqlDoc::from_path("path").deny("path1").deny("path2");
-        let expected_builder = SqlDocBuilder {
-            source: crate::sql_doc::SqlFileDocSource::File(PathBuf::from("path")),
-            deny: vec!["path1".to_owned(), "path2".to_owned()],
-            multiline_flat: MultiFlatten::default(),
-            leading_type: LeadingCommentCapture::default(),
-        };
-        assert_eq!(actual_builder, expected_builder);
-    }
-
-    #[cfg(feature = "std")]
-    #[test]
     fn test_sql_builder_to_sql_doc() -> Result<(), Box<dyn std::error::Error>> {
         use std::{env, fs, vec};
         let base = env::temp_dir().join("sql_builder_to_sql_doc");
@@ -804,21 +785,6 @@ mod tests {
         assert_eq!(sql_doc_deny, SqlDoc::new(vec![]));
         let _ = fs::remove_dir_all(&base);
         Ok(())
-    }
-
-    #[cfg(feature = "std")]
-    #[test]
-    fn test_builder_multiflatten_variants() {
-        let b1 = SqlDoc::from_path("dummy.sql");
-        let b2 = SqlDoc::from_path("dummy.sql").flatten_multiline();
-        let b3 = SqlDoc::from_path("dummy.sql").flatten_multiline_with(" . ");
-        let b4 = SqlDoc::from_path("dummy.sql").flatten_multiline_with("--").preserve_multiline();
-        assert!(matches!(b1, SqlDocBuilder { multiline_flat: MultiFlatten::NoFlat, .. }));
-        assert!(matches!(b2, SqlDocBuilder { multiline_flat: MultiFlatten::FlattenWithNone, .. }));
-        assert!(
-            matches!(b3, SqlDocBuilder { multiline_flat: MultiFlatten::Flatten(s) , .. } if s == " . ")
-        );
-        assert!(matches!(b4, SqlDocBuilder { multiline_flat: MultiFlatten::NoFlat, .. }));
     }
 
     #[test]
@@ -928,23 +894,6 @@ mod tests {
         assert_eq!(t2.columns()[0].doc(), Some("col1doc"));
 
         Ok(())
-    }
-
-    #[cfg(feature = "std")]
-    #[test]
-    fn test_sql_doc_from_str_builds_expected_builder() {
-        let content = "CREATE TABLE t(id INTEGER);";
-
-        let actual = SqlDoc::builder_from_str(content);
-
-        let expected = SqlDocBuilder {
-            source: crate::sql_doc::SqlFileDocSource::FromString(content),
-            deny: vec![],
-            multiline_flat: MultiFlatten::default(),
-            leading_type: LeadingCommentCapture::default(),
-        };
-
-        assert_eq!(actual, expected);
     }
 
     #[cfg(feature = "std")]

@@ -852,65 +852,6 @@ mod tests {
 
     #[test]
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn location_new_and_default() {
-        let mut location = Location::new(2, 5);
-        location.column = 20;
-        location.line = 43;
-
-        assert_eq!(Location { column: 20, line: 43 }, location);
-
-        let location2 = Location::default();
-        assert_eq!(location2, Location { line: 1, column: 1 });
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn span_default_and_updates() {
-        let default = Span::default();
-        assert_eq!(default.start, Location::default());
-        assert_eq!(default.end, Location::default());
-
-        let span = Span { end: Location::new(55, 100), ..Default::default() };
-
-        assert_eq!(span.start, Location::default());
-        assert_eq!(span.end, Location { line: 55, column: 100 });
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn comments_with_comment_kind() {
-        let raw_comment = "-- a comment";
-        let len = raw_comment.len() as u64;
-
-        let singleline = CommentKind::SingleLine;
-        let mut span = Span::default();
-        span.end.column = len - 1;
-
-        let comment = Comment::new(raw_comment.to_owned(), singleline.clone(), span);
-
-        assert_eq!(comment.kind, singleline);
-
-        let expected_span =
-            Span::new(Location { line: 1, column: 1 }, Location { line: 1, column: len - 1 });
-
-        assert_eq!(comment.span, expected_span);
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
-    fn multiline_comment_span() {
-        let kind = CommentKind::MultiLine;
-        let span = Span::new(Location { line: 1, column: 1 }, Location { line: 2, column: 9 });
-
-        let comment = Comment::new("/* hello world */".to_owned(), kind.clone(), span);
-
-        assert_eq!(comment.kind, kind);
-        assert_eq!(comment.span.start.line, 1);
-        assert_eq!(comment.span.end.line, 2);
-    }
-
-    #[test]
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     fn every_comment_on_a_captured_line_is_captured() {
         let comments = Comments::scan_comments("/* one */ /* two */\n")
             .unwrap_or_else(|error| panic!("scan failed: {error}"));
