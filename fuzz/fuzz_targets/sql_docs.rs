@@ -1,9 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use std::str;
-
-use sql_docs::{SqlDoc, GenericDialect};
+use sql_docs::{GenericDialect, SqlDoc};
 
 fuzz_target!(|data: String| {
     const SEPS: [&str; 6] = ["", " ", "\n", " | ", " • ", "--"];

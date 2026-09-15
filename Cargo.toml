@@ -21,7 +21,6 @@ categories = [
 [features]
 default = ["std"]
 std = []
-fuzzing = []
 
 [dependencies]
 sqlparser = "0.62"
