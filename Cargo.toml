@@ -29,7 +29,7 @@ sqlparser = "0.62"
 wasm-bindgen-test = "0.3"
 
 [lints.rust]
-missing_docs = "forbid"
+missing_docs = "deny"
 unreachable_patterns = "forbid"
 unused_must_use = "forbid"
 unused_import_braces = "forbid"
