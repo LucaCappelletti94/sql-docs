@@ -123,8 +123,8 @@ jobs:
         toolchain: ${{ steps.rust-version.outputs.toolchain }}
     - name: Check both feature sets
       run: |
-        cargo check
-        cargo check --no-default-features
+        cargo check --all-targets --all-features
+        cargo check --all-targets --no-default-features
 
   doc:
     name: Documentation
